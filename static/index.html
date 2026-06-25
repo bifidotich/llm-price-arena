@@ -685,8 +685,8 @@ async function upd() {
         ? 'left:' + (x + 8) + 'px; top:' + (y - 6) + 'px;'
         : 'left:' + (x - 92) + 'px; top:' + (y - 6) + 'px; text-align: right;';
 
-      var safeModel = item.model.replace(/'/g, "\\'");
-      sc += '<div class="scatter-dot" style="left:' + x + 'px; top:' + y + 'px; --c:' + col + '; background:' + col + '" onmouseover="showTt(event,\'" + safeModel + "\'," + item.rating + "," + graphPrice + "," + getValueForPreset(item, preset) + ")" + '" onmouseout="hideTt()"></div>';
+      var safeModel = item.model.replace(/'/g, '').replace(/"/g, '');
+      sc += '<div class="scatter-dot" style="left:' + x + 'px; top:' + y + 'px; --c:' + col + '; background:' + col + '" onmouseover="showTt(event,' + "'" + safeModel + "'" + ',' + item.rating + ',' + graphPrice + ',' + getValueForPreset(item, preset) + ')" onmouseout="hideTt()"></div>';
       sc += '<div class="scatter-dot-label" style="' + labelStyle + '">' + item.model + '</div>';
     });
     document.getElementById('sChart').innerHTML = sc;
