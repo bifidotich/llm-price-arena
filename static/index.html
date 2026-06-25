@@ -417,7 +417,19 @@
        margin: 10px 0;
        border: 1px solid rgba(45, 46, 66, 0.5);
      }
-  </style>
+      .update-ts {
+        position: fixed;
+        bottom: 10px;
+        right: 14px;
+        font-size: 0.6em;
+        color: #4a5568;
+        opacity: 0.35;
+        z-index: 999;
+        pointer-events: none;
+        user-select: none;
+        letter-spacing: 0.2px;
+      }
+   </style>
 </head>
 <body>
 <div class="container">
@@ -426,6 +438,8 @@
     <span class="badge">Benchmarks vs Price</span>
   </div>
   <div class="subtitle" id="subtitle">Loading data...</div>
+  <div class="update-ts" id="updateTime"></div>
+  
   
   <div class="controls">
     <div class="control-group">
@@ -603,7 +617,7 @@ function showDowntime(result) {
     ? '<strong>⚠️ Сервис недоступен</strong><br><br>Последние данные от ' + new Date(result.updated_at).toLocaleString() + ' устарели (более 7 дней).<br>Backend-воркер не обновлял данные. Проверьте подключение к OpenRouter и HuggingFace.'
     : '<strong>⚠️ Сервис недоступен</strong><br><br>Backend не отвечает. Проверьте, запущен ли сервер.';
   document.getElementById('subtitle').textContent = '⚠️ Сервис недоступен — данные устарели';
-  document.getElementById('updatedAt').textContent = result && result.updated_at ? new Date(result.updated_at).toLocaleString() + ' (УСТАРЕЛО)' : '-';
+    document.getElementById('updatedAt').textContent = result && result.updated_at ? new Date(result.updated_at).toLocaleString() + ' (УСТАРЕЛО)' : '-';
   document.getElementById('modelCount').textContent = '0';
   document.getElementById('sChart').innerHTML = '<div class="error-box">' + msg + '</div>';
   document.getElementById('bChart').innerHTML = '<div class="error-box">' + msg + '</div>';
@@ -828,7 +842,36 @@ document.getElementById('ptCompletion').addEventListener('click', function() {
   upd();
 });
 
+
+function updateTimeDisplay() {
+  var el = document.getElementById('updateTime');
+  if (!el) return;
+  var upEl = document.getElementById('updatedAt');
+  if (!upEl || upEl.textContent === '-') {
+    el.textContent = '';
+    return;
+  }
+  var parsed = new Date(upEl.textContent);
+  if (isNaN(parsed.getTime())) {
+    el.textContent = '';
+    return;
+  }
+  var diff = Date.now() - parsed.getTime();
+  var mins = Math.floor(diff / 60000);
+  var hours = Math.floor(diff / 3600000);
+  var days = Math.floor(diff / 86400000);
+  var text = '';
+  if (mins < 1) text = 'только что';
+  else if (mins < 60) text = mins + ' мин назад';
+  else if (hours < 24) text = hours + ' ч назад';
+  else if (days < 7) text = days + ' д назад';
+  else text = days + ' д назад';
+  el.textContent = text;
+}
+setInterval(updateTimeDisplay, 30000);
+
 window.onload = function() {
+  updateTimeDisplay();
   loadMeta();
 };
 </script>
