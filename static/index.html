@@ -595,10 +595,33 @@ window.onclick = function(event) {
   if (event.target == modal) modal.style.display = 'none';
 };
 
+const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+let lastGoodData = null; // сохраняем последние свежие данные
+
+function showDowntime(result) {
+  var msg = result && result.updated_at
+    ? '<strong>⚠️ Сервис недоступен</strong><br><br>Последние данные от ' + new Date(result.updated_at).toLocaleString() + ' устарели (более 7 дней).<br>Backend-воркер не обновлял данные. Проверьте подключение к OpenRouter и HuggingFace.'
+    : '<strong>⚠️ Сервис недоступен</strong><br><br>Backend не отвечает. Проверьте, запущен ли сервер.';
+  document.getElementById('subtitle').textContent = '⚠️ Сервис недоступен — данные устарели';
+  document.getElementById('updatedAt').textContent = result && result.updated_at ? new Date(result.updated_at).toLocaleString() + ' (УСТАРЕЛО)' : '-';
+  document.getElementById('modelCount').textContent = '0';
+  document.getElementById('sChart').innerHTML = '<div class="error-box">' + msg + '</div>';
+  document.getElementById('bChart').innerHTML = '<div class="error-box">' + msg + '</div>';
+  document.getElementById('tbl').innerHTML = '';
+  document.getElementById('bTitle').textContent = '⚠️ Сервис недоступен';
+  document.getElementById('sTitle').textContent = '⚠️ Сервис недоступен';
+}
+
 function showLoading() {
   document.getElementById('sChart').innerHTML = '<div class="loading-box">Loading data...</div>';
   document.getElementById('bChart').innerHTML = '<div class="loading-box">Loading data...</div>';
   document.getElementById('tbl').innerHTML = '';
+}
+
+function isDataFresh(updatedAt) {
+  if (!updatedAt) return false;
+  var age = Date.now() - new Date(updatedAt).getTime();
+  return age < ONE_WEEK_MS;
 }
 
 async function upd() {
@@ -610,9 +633,26 @@ async function upd() {
     
     if (!c || !preset) return;
     
-    var result = await fetchModels(c, n, preset);
+    var result;
+    try {
+      result = await fetchModels(c, n, preset);
+    } catch(e) {
+      // API недоступен — показываем заглушку
+      showDowntime(null);
+      return;
+    }
+    
     var m = result.models || [];
     var catName = CAT_NAMES[c] || c;
+    
+    // Проверка свежести данных
+    if (!isDataFresh(result.updated_at)) {
+      showDowntime(result);
+      return;
+    }
+    
+    // Данные свежие — сохраняем и показываем
+    lastGoodData = result;
     
     document.getElementById('subtitle').textContent = 'LM Arena — OpenRouter — ' + result.count + ' models';
     document.getElementById('updatedAt').textContent = result.updated_at ? new Date(result.updated_at).toLocaleString() : '-';
