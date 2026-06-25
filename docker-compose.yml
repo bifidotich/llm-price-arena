@@ -1,0 +1,13 @@
+services:
+  app:
+    build: .
+    ports:
+      - "${SERVER__PORT:-8000}:8000"
+    env_file:
+      - .env
+    volumes:
+      # Кэш переживает пересоздание контейнера
+      - ./data:/app/data
+      # Правка конфига без пересборки
+      - ./config.yaml:/app/config.yaml:ro
+    restart: unless-stopped

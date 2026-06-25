@@ -1,0 +1,52 @@
+# LLM Value Tracker — конфигурация.
+# Любое значение можно переопределить переменной окружения (см. app/config.py).
+
+server:
+  host: 0.0.0.0
+  port: 8000
+
+worker:
+  # Интервал обновления данных в минутах.
+  refresh_interval_minutes: 360
+  # Прогревать кэш при старте, если он пуст.
+  warm_on_start: true
+
+cache:
+  backend: file            # file | (redis — TODO)
+  path: data/snapshot.json
+
+scoring:
+  anchor: 1400             # якорь Elo для winProb
+  token_share: 0.75        # доля входных токенов в blended_price (≈ 3:1 вход:выход)
+  presets:
+    quality:  { beta: 2.0, gamma: 0.3 }
+    balanced: { beta: 1.0, gamma: 0.5 }   # дефолт
+    budget:   { beta: 1.0, gamma: 1.0 }
+  default_preset: balanced
+
+sources:
+  lmarena:
+    dataset: lmarena-ai/leaderboard-dataset
+    split: latest
+    # Маппинг UI-вкладки → (subset датасета, значение поля category).
+    # ВНИМАНИЕ: точные имена subset'ов/категорий нужно сверить с датасетом
+    # (см. app/sources/lmarena.py — там TODO про инспекцию схемы).
+    categories:
+      overall:  { subset: text_style_control, category: overall }
+      coding:   { subset: text_style_control, category: coding }
+      math:     { subset: text_style_control, category: math }
+      research: { subset: text_style_control, category: hard_6 }   # TODO: уточнить имя категории
+  openrouter:
+    url: https://openrouter.ai/api/v1/models
+
+# Маппинг имён LMArena -> id модели в OpenRouter.
+# Ключ — model_name из датасета, значение — id в OpenRouter (pricing берётся оттуда).
+# Это самое хрупкое место: имена не совпадают, часть моделей на OpenRouter нет.
+# null = модель сознательно без цены (попадёт в unmatched, не в выдачу).
+model_aliases:
+  claude-opus-4-6:            anthropic/claude-opus-4.6
+  claude-opus-4-6-thinking:   anthropic/claude-opus-4.6
+  claude-sonnet-4-6:          anthropic/claude-sonnet-4.6
+  gemini-3-pro:               google/gemini-3-pro
+  gpt-5.5:                     openai/gpt-5.5
+  # ... остальные добавляются по мере появления в данных

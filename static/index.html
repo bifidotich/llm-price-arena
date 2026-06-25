@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LLM Price Arena: Benchmarks vs Price</title>
+  <style>
+     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+     html {
+       scroll-snap-type: y proximity;
+       scroll-behavior: smooth;
+     }
+     * {
+       box-sizing: border-box;
+       margin: 0;
+       padding: 0;
+     }
+     body {
+       font-family: 'Inter', 'Segoe UI', sans-serif;
+       background: #0f1117;
+       color: #e2e8f0;
+       padding: 24px;
+     }
+     .container {
+       max-width: 1200px;
+       margin: 0 auto;
+     }
+     .header {
+       display: flex;
+       align-items: center;
+       gap: 16px;
+       margin-bottom: 6px;
+       scroll-snap-align: start;
+       scroll-margin-top: 24px;
+     }
+     .header h1 {
+       font-size: 2em;
+       font-weight: 800;
+       background: linear-gradient(135deg, #a78bfa, #6366f1, #8b5cf6);
+       -webkit-background-clip: text;
+       -webkit-text-fill-color: transparent;
+       letter-spacing: -0.5px;
+     }
+     .header .badge {
+       background: linear-gradient(135deg, #7c3aed, #6366f1);
+       color: #fff;
+       font-size: .7em;
+       font-weight: 600;
+       padding: 4px 12px;
+       border-radius: 999px;
+       text-transform: uppercase;
+       letter-spacing: 0.5px;
+     }
+     .subtitle {
+       color: #6b7280;
+       font-size: .95em;
+       margin-bottom: 24px;
+     }
+     .controls {
+       display: flex;
+       flex-wrap: wrap;
+       gap: 16px;
+       background: #1e2230;
+       padding: 16px;
+       border-radius: 12px;
+       margin-bottom: 24px;
+       border: 1px solid #2d3142;
+       align-items: center;
+       scroll-snap-align: start;
+       scroll-margin-top: 24px;
+     }
+     .control-group {
+       display: flex;
+       flex-direction: column;
+       gap: 6px;
+     }
+     .control-group label {
+       font-size: .75em;
+       color: #94a3b8;
+       font-weight: 600;
+       text-transform: uppercase;
+       letter-spacing: 0.5px;
+     }
+     select {
+       background: #0f1117;
+       color: #e2e8f0;
+       border: 1px solid #2d3142;
+       padding: 8px 12px;
+       border-radius: 8px;
+       font-size: .9em;
+       outline: none;
+       cursor: pointer;
+       min-width: 150px;
+       transition: border-color 0.2s;
+     }
+     select:focus {
+       border-color: #6366f1;
+     }
+     .toggle-group {
+       display: flex;
+       background: #0f1117;
+       border: 1px solid #2d3142;
+       padding: 4px;
+       border-radius: 8px;
+       height: 38px;
+       align-items: center;
+     }
+     .toggle-btn {
+       background: transparent;
+       border: none;
+       color: #94a3b8;
+       padding: 6px 14px;
+       font-size: .85em;
+       font-weight: 600;
+       border-radius: 6px;
+       cursor: pointer;
+       transition: all 0.2s;
+     }
+     .toggle-btn.active {
+       background: #6366f1;
+       color: #fff;
+     }
+     .stats {
+       display: flex;
+       gap: 12px;
+       margin-left: auto;
+       align-items: center;
+       background: #0f1117;
+       padding: 6px 16px;
+       border-radius: 8px;
+       border: 1px solid #2d3142;
+       height: 38px;
+       color: #94a3b8;
+       font-size: .85em;
+     }
+     .stats span {
+       color: #fff;
+       font-weight: 700;
+     }
+     .dashboard {
+       display: flex;
+       flex-direction: column;
+       gap: 24px;
+       margin-bottom: 24px;
+     }
+     .card {
+       background: #1e2230;
+       border: 1px solid #2d3142;
+       border-radius: 16px;
+       padding: 20px;
+       display: flex;
+       flex-direction: column;
+       scroll-snap-align: start;
+       scroll-margin-top: 24px;
+     }
+     .card h2 {
+       font-size: 1.1em;
+       font-weight: 700;
+       margin-bottom: 16px;
+       color: #fff;
+       display: flex;
+       align-items: center;
+       gap: 8px;
+     }
+     .card-header-row {
+       display: flex;
+       justify-content: space-between;
+       align-items: center;
+       margin-bottom: 16px;
+       flex-wrap: wrap;
+       gap: 12px;
+     }
+     .chart-container {
+       position: relative;
+       width: 100%;
+       height: 380px;
+       margin-top: auto;
+     }
+     #sChart {
+       height: 600px;
+     }
+     .error-box {
+       display: flex;
+       align-items: center;
+       justify-content: center;
+       height: 100%;
+       color: #ef4444;
+       font-weight: 500;
+       font-size: .9em;
+       background: rgba(239, 68, 68, 0.05);
+       border: 1px dashed rgba(239, 68, 68, 0.2);
+       border-radius: 8px;
+     }
+     .loading-box {
+       display: flex;
+       align-items: center;
+       justify-content: center;
+       height: 100%;
+       color: #6366f1;
+       font-weight: 500;
+       font-size: .9em;
+     }
+     .scatter-gridLine {
+       position: absolute;
+       background: rgba(45, 49, 66, 0.5);
+       transition: all 0.3s;
+     }
+     .scatter-gridLine.v {
+       top: 0;
+       bottom: 25px;
+       width: 1px;
+     }
+     .scatter-gridLine.h {
+       left: 60px;
+       right: 0;
+       height: 1px;
+     }
+     .scatter-label {
+       position: absolute;
+       color: #64748b;
+       font-size: .75em;
+       font-weight: 500;
+     }
+     .scatter-dot-label {
+       position: absolute;
+       font-size: 0.68em;
+       color: #94a3b8;
+       white-space: nowrap;
+       pointer-events: none;
+       z-index: 1;
+       background: rgba(15, 17, 23, 0.9);
+       padding: 1px 5px;
+       border-radius: 4px;
+       border: 1px solid rgba(45, 49, 66, 0.4);
+       max-width: 85px;
+       overflow: hidden;
+       text-overflow: ellipsis;
+     }
+     .scatter-dot {
+       position: absolute;
+       width: 10px;
+       height: 10px;
+       border-radius: 50%;
+       transform: translate(-50%, -50%);
+       cursor: pointer;
+       transition: transform 0.2s, box-shadow 0.2s;
+       z-index: 2;
+       border: 2px solid #1e2230;
+     }
+     .scatter-dot:hover {
+       transform: translate(-50%, -50%) scale(1.4);
+       z-index: 10;
+       box-shadow: 0 0 12px var(--c);
+     }
+     .scatter-tooltip {
+       position: absolute;
+       background: #0f1117;
+       border: 1px solid #2d3142;
+       padding: 8px 12px;
+       border-radius: 8px;
+       font-size: .8em;
+       color: #e2e8f0;
+       pointer-events: none;
+       display: none;
+       z-index: 100;
+       box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+       max-width: 200px;
+     }
+     .bar-row {
+       display: flex;
+       align-items: center;
+       margin-bottom: 10px;
+       gap: 12px;
+     }
+     .bar-label-left {
+       width: 200px;
+       font-size: .82em;
+       color: #e2e8f0;
+       text-overflow: ellipsis;
+       overflow: hidden;
+       white-space: nowrap;
+       font-weight: 600;
+       text-align: left;
+       flex-shrink: 0;
+     }
+     .bar-track {
+       flex: 1;
+       background: #0f1117;
+       height: 24px;
+       border-radius: 6px;
+       overflow: hidden;
+       border: 1px solid rgba(45, 49, 66, 0.5);
+       position: relative;
+     }
+     .bar-fill {
+       height: 100%;
+       border-radius: 4px;
+       transition: width 0.5s ease-out;
+     }
+     .bar-val {
+       position: absolute;
+       right: 8px;
+       top: 50%;
+       transform: translateY(-50%);
+       font-size: .75em;
+       font-weight: 700;
+       color: #fff;
+     }
+     .table-card {
+       background: #1e2230;
+       border: 1px solid #2d3142;
+       border-radius: 16px;
+       padding: 20px;
+       overflow-x: auto;
+       scroll-snap-align: start;
+       scroll-margin-top: 24px;
+     }
+     table {
+       width: 100%;
+       border-collapse: collapse;
+       text-align: left;
+       font-size: .9em;
+     }
+     th {
+       color: #94a3b8;
+       font-weight: 600;
+       font-size: .75em;
+       text-transform: uppercase;
+       letter-spacing: 0.5px;
+       padding: 12px 16px;
+       border-bottom: 1px solid #2d3142;
+       cursor: pointer;
+       user-select: none;
+     }
+     th:hover {
+       color: #6366f1;
+     }
+     td {
+       padding: 12px 16px;
+       border-bottom: 1px solid rgba(45, 49, 66, 0.3);
+       color: #e2e8f0;
+     }
+     tr:hover td {
+       background: rgba(255, 255, 255, 0.02);
+     }
+     .rank {
+       font-weight: 700;
+       width: 50px;
+       color: #64748b;
+     }
+     .rank-1 { color: #fbbf24 }
+     .rank-2 { color: #cbd5e1 }
+     .rank-3 { color: #b45309 }
+     .rank-1-row { background: rgba(251, 191, 36, 0.02); }
+     .rank-2-row { background: rgba(203, 213, 225, 0.02); }
+     .rank-3-row { background: rgba(180, 83, 9, 0.02); }
+     .model { font-weight: 600; color: #fff; }
+     .rating { font-weight: 700; color: #38bdf8; }
+     .price { font-family: monospace; color: #34d399; }
+     
+     .info-icon {
+       cursor: pointer;
+       color: #a78bfa;
+       margin-left: 4px;
+       display: inline-block;
+       user-select: none;
+     }
+     .info-icon:hover {
+       color: #c084fc;
+     }
+     .modal-overlay {
+       display: none;
+       position: fixed;
+       top: 0; left: 0; width: 100%; height: 100%;
+       background: rgba(15, 17, 23, 0.7);
+       backdrop-filter: blur(4px);
+       z-index: 1000;
+       align-items: center;
+       justify-content: center;
+     }
+     .modal-content {
+       background: #1e2230;
+       border: 1px solid #2d3142;
+       padding: 24px;
+       border-radius: 12px;
+       max-width: 440px;
+       width: 90%;
+       box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+       position: relative;
+     }
+     .modal-close {
+       position: absolute;
+       top: 12px; right: 16px;
+       font-size: 20px;
+       cursor: pointer;
+       color: #64748b;
+     }
+     .modal-close:hover { color: #fff; }
+     .modal-title {
+       font-weight: 700;
+       color: #fff;
+       margin-bottom: 12px;
+       font-size: 1.1em;
+     }
+     .modal-body {
+       font-size: 0.9em;
+       color: #94a3b8;
+       line-height: 1.6;
+     }
+     .modal-formula {
+       background: #0f1117;
+       padding: 8px 12px;
+       border-radius: 6px;
+       color: #a78bfa;
+       font-family: monospace;
+       font-weight: 600;
+       margin: 10px 0;
+       border: 1px solid rgba(45, 46, 66, 0.5);
+     }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>LLM Price Arena</h1>
+    <span class="badge">Benchmarks vs Price</span>
+  </div>
+  <div class="subtitle" id="subtitle">Loading data...</div>
+  
+  <div class="controls">
+    <div class="control-group">
+      <label>Category</label>
+      <select id="catSel"></select>
+    </div>
+    <div class="control-group">
+      <label>Top</label>
+      <select id="topSel">
+        <option value="10">10</option>
+        <option value="20">20</option>
+        <option value="50" selected>50</option>
+        <option value="0">All</option>
+      </select>
+    </div>
+    <div class="control-group">
+      <label>Value Profile</label>
+      <select id="presetSel"></select>
+    </div>
+    <div class="stats">Models: <span id="modelCount">0</span> &middot; Updated: <span id="updatedAt">-</span></div>
+  </div>
+
+  <div class="dashboard">
+    <div class="card">
+      <h2 id="bTitle">Top Models — Rating, Prices & Value</h2>
+      <div class="chart-container" id="bChart" style="overflow-y:auto; height:auto; max-height:550px; padding-right: 16px;"></div>
+    </div>
+    
+    <div class="card">
+      <div class="card-header-row">
+        <h2 id="sTitle" style="margin-bottom: 0;">Price vs Rating</h2>
+        <div class="control-group" style="flex-direction: row; align-items: center; gap: 8px;">
+          <label style="margin-bottom: 0;">Price Axis:</label>
+          <div class="toggle-group" style="height: 32px; padding: 2px;">
+            <button id="ptPrompt" class="toggle-btn active" style="padding: 4px 10px; font-size: 0.8em;">Input</button>
+            <button id="ptCompletion" class="toggle-btn" style="padding: 4px 10px; font-size: 0.8em;">Output</button>
+          </div>
+        </div>
+      </div>
+      <div class="chart-container" id="sChart"></div>
+    </div>
+  </div>
+
+  <div class="table-card">
+    <div id="tbl"></div>
+  </div>
+</div>
+
+<div id="infoModal" class="modal-overlay">
+  <div class="modal-content">
+    <span class="modal-close" onclick="closeModal()">&times;</span>
+    <div class="modal-title">Экономическая выгода модели (Value Score)</div>
+    <div class="modal-body">
+      Расчет построен на основе теории вероятностей (шкала Elo):
+      <div class="modal-formula" id="modalFormula">(WinProb^β / BlendedPrice^γ) * 100</div>
+      Текущие параметры весов:
+      <br>• <strong id="modalBeta">β = 1.0</strong> — чувствительность к качеству (Elo).
+      <br>• <strong id="modalGamma">γ = 0.5</strong> — чувствительность к цене.
+      <hr style="margin: 10px 0; border: 0; border-top: 1px solid #2d3142;">
+      • <strong>WinProb</strong> — вероятность победы над базовым якорем (1400 Elo).
+      <br>• <strong>BlendedPrice</strong> — средневзвешенная стоимость 1M токенов (75% вход / 25% выход).
+    </div>
+  </div>
+</div>
+
+<script>
+let pt = 'input';
+let currentSort = 'value-desc';
+let metaData = { categories: [], presets: {}, default_preset: 'balanced' };
+
+const CAT_NAMES = { overall:'Overall', coding:'Coding', math:'Math', research:'Research', agent:'Agentic' };
+const PRESETS = { quality: { label:'Quality-first', beta:2.0, gamma:0.3 }, balanced: { label:'Balanced', beta:1.0, gamma:0.5 }, budget: { label:'Budget-focused', beta:1.0, gamma:1.0 } };
+
+async function loadMeta() {
+  try {
+    const resp = await fetch('/api/meta');
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    metaData = await resp.json();
+  } catch(e) {
+    document.getElementById('subtitle').textContent = 'Failed to load: ' + e.message;
+    // Fallback defaults
+    metaData = { categories: ['overall','coding','math','research','agent'], presets: ['quality','balanced','budget'], default_preset: 'balanced' };
+  }
+  
+  const catSel = document.getElementById('catSel');
+  catSel.innerHTML = '';
+  (metaData.categories || ['overall','coding','math','research','agent']).forEach(function(c) {
+    const opt = document.createElement('option');
+    opt.value = c;
+    opt.textContent = CAT_NAMES[c] || c;
+    catSel.appendChild(opt);
+  });
+  
+  const presetSel = document.getElementById('presetSel');
+  presetSel.innerHTML = '';
+  const presets = metaData.presets || ['quality','balanced','budget'];
+  presets.forEach(function(p) {
+    const opt = document.createElement('option');
+    opt.value = p;
+    const info = PRESETS[p] || { label: p };
+    opt.textContent = info.label + ' (β=' + (info.beta || '?') + ', γ=' + (info.gamma || '?') + ')';
+    if (p === (metaData.default_preset || 'balanced')) opt.selected = true;
+    presetSel.appendChild(opt);
+  });
+  
+  upd();
+}
+
+async function fetchModels(category, top, preset) {
+  const url = '/api/models?category=' + encodeURIComponent(category) + '&preset=' + encodeURIComponent(preset) + '&top=' + top;
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error('HTTP ' + resp.status);
+  return await resp.json();
+}
+
+function getValueForPreset(item, preset) {
+  return (item.value && item.value[preset] != null) ? item.value[preset] : 0;
+}
+
+function sortModels(arr, sortKey, preset) {
+  var a = arr.slice();
+  
+  if (sortKey === 'rating-desc') a.sort(function(a,b){ return b.rating - a.rating; });
+  else if (sortKey === 'rating-asc') a.sort(function(a,b){ return a.rating - b.rating; });
+  else if (sortKey === 'name') a.sort(function(a,b){ return a.model.localeCompare(b.model); });
+  else if (sortKey === 'name-desc') a.sort(function(a,b){ return b.model.localeCompare(a.model); });
+  else if (sortKey === 'value-desc') a.sort(function(a,b){ return getValueForPreset(b, preset) - getValueForPreset(a, preset); });
+  else if (sortKey === 'value-asc') a.sort(function(a,b){ return getValueForPreset(a, preset) - getValueForPreset(b, preset); });
+  else if (sortKey === 'input-asc') a.sort(function(a,b){ return a.input_price_1M - b.input_price_1M; });
+  else if (sortKey === 'input-desc') a.sort(function(a,b){ return b.input_price_1M - a.input_price_1M; });
+  else if (sortKey === 'output-asc') a.sort(function(a,b){ return a.output_price_1M - b.output_price_1M; });
+  else if (sortKey === 'output-desc') a.sort(function(a,b){ return b.output_price_1M - a.output_price_1M; });
+  return a;
+}
+
+window.setSort = function(type) {
+  if (type === 'name') {
+    currentSort = (currentSort === 'name') ? 'name-desc' : 'name';
+  } else if (type === 'rating') {
+    currentSort = (currentSort === 'rating-desc') ? 'rating-asc' : 'rating-desc';
+  } else if (type === 'value') {
+    currentSort = (currentSort === 'value-desc') ? 'value-asc' : 'value-desc';
+  } else if (type === 'input') {
+    currentSort = (currentSort === 'input-asc') ? 'input-desc' : 'input-asc';
+  } else if (type === 'output') {
+    currentSort = (currentSort === 'output-asc') ? 'output-desc' : 'output-asc';
+  }
+  upd();
+};
+
+window.openModal = function(e) {
+  if (e) e.stopPropagation();
+  const activePreset = document.getElementById('presetSel').value;
+  const p = PRESETS[activePreset] || PRESETS.balanced;
+  document.getElementById('modalBeta').textContent = 'β = ' + p.beta.toFixed(1);
+  document.getElementById('modalGamma').textContent = 'γ = ' + p.gamma.toFixed(1);
+  document.getElementById('modalFormula').textContent = '(WinProb^' + p.beta.toFixed(1) + ' / BlendedPrice^' + p.gamma.toFixed(1) + ') * 100';
+  document.getElementById('infoModal').style.display = 'flex';
+};
+
+window.closeModal = function() {
+  document.getElementById('infoModal').style.display = 'none';
+};
+
+window.onclick = function(event) {
+  var modal = document.getElementById('infoModal');
+  if (event.target == modal) modal.style.display = 'none';
+};
+
+function showLoading() {
+  document.getElementById('sChart').innerHTML = '<div class="loading-box">Loading data...</div>';
+  document.getElementById('bChart').innerHTML = '<div class="loading-box">Loading data...</div>';
+  document.getElementById('tbl').innerHTML = '';
+}
+
+async function upd() {
+  showLoading();
+  try {
+    var c = document.getElementById('catSel').value;
+    var n = parseInt(document.getElementById('topSel').value);
+    var preset = document.getElementById('presetSel').value;
+    
+    if (!c || !preset) return;
+    
+    var result = await fetchModels(c, n, preset);
+    var m = result.models || [];
+    var catName = CAT_NAMES[c] || c;
+    
+    document.getElementById('subtitle').textContent = 'LM Arena — OpenRouter — ' + result.count + ' models';
+    document.getElementById('updatedAt').textContent = result.updated_at ? new Date(result.updated_at).toLocaleString() : '-';
+    
+    if (!m || !m.length) {
+      document.getElementById('sChart').innerHTML = '<div class="error-box">No data</div>';
+      document.getElementById('bChart').innerHTML = '<div class="error-box">No data</div>';
+      document.getElementById('tbl').innerHTML = '';
+      document.getElementById('modelCount').textContent = '0';
+      return;
+    }
+    
+    // Sort by current sort key (after fetching - server sorts by value desc by default)
+    m = sortModels(m, currentSort, preset);
+    
+    var prs = m.map(function(x) { return pt === 'input' ? x.input_price_1M : x.output_price_1M; });
+    var rts = m.map(function(x) { return x.rating; });
+
+    var minP = Math.min.apply(null, prs);
+    var maxP = Math.max.apply(null, prs);
+    if (maxP === minP) maxP = minP + 1;
+    var pPad = (maxP - minP) * 0.05;
+    if (pPad < 0.1) pPad = 0.1;
+    minP = Math.max(0, minP - pPad);
+    maxP = maxP + pPad;
+
+    var minR = Math.min.apply(null, rts);
+    var maxR = Math.max.apply(null, rts);
+    var rPad = (maxR - minR) * 0.05;
+    if (rPad < 5) rPad = 5;
+    minR = minR - rPad;
+    maxR = maxR + rPad;
+
+    // Scatter plot
+    var sc = '<div class="scatter-tooltip" id="sTt"></div>';
+    var cw = document.getElementById('sChart').clientWidth || 1150;
+    var ch = 600;
+    var padL = 60, padB = 35, padR = 120, padT = 25;
+    var innerW = cw - padL - padR;
+    var innerH = ch - padT - padB;
+
+    for (var i = 0; i <= 5; i++) {
+      var r = minR + ((maxR - minR) / 5) * i;
+      var y = padT + innerH - ((r - minR) / (maxR - minR)) * innerH;
+      sc += '<div class="scatter-gridLine h" style="top:' + y + 'px; left:' + padL + 'px; right:' + padR + 'px"></div>';
+      sc += '<div class="scatter-label" style="top:' + (y - 6) + 'px; left:5px; width:50px; text-align:right">' + Math.round(r) + '</div>';
+    }
+
+    for (var i = 0; i <= 5; i++) {
+      var p = minP + ((maxP - minP) / 5) * i;
+      var x = padL + ((p - minP) / (maxP - minP)) * innerW;
+      sc += '<div class="scatter-gridLine v" style="left:' + x + 'px; top:' + padT + 'px; bottom:' + padB + 'px"></div>';
+      sc += '<div class="scatter-label" style="bottom:5px; left:' + (x - 30) + 'px; width:60px; text-align:center">$' + p.toFixed(2) + '</div>';
+    }
+
+    var scores = m.map(function(x) { return getValueForPreset(x, preset); });
+    var minScore = Math.min.apply(null, scores);
+    var maxScore = Math.max.apply(null, scores);
+
+    m.forEach(function(item, idx) {
+      var graphPrice = pt === 'input' ? item.input_price_1M : item.output_price_1M;
+      var x = padL + ((graphPrice - minP) / (maxP - minP)) * innerW;
+      var y = padT + innerH - ((item.rating - minR) / (maxR - minR)) * innerH;
+      
+      var pct = (maxScore === minScore) ? 0.5 : (getValueForPreset(item, preset) - minScore) / (maxScore - minScore);
+      var hue = 270 - (pct * 130);
+      var col = 'hsl(' + hue + ', 85%, 60%)';
+      
+      var labelStyle = (idx % 2 === 0 || x < 110)
+        ? 'left:' + (x + 8) + 'px; top:' + (y - 6) + 'px;'
+        : 'left:' + (x - 92) + 'px; top:' + (y - 6) + 'px; text-align: right;';
+
+      var safeModel = item.model.replace(/'/g, "\\'");
+      sc += '<div class="scatter-dot" style="left:' + x + 'px; top:' + y + 'px; --c:' + col + '; background:' + col + '" onmouseover="showTt(event,\'" + safeModel + "\'," + item.rating + "," + graphPrice + "," + getValueForPreset(item, preset) + ")" + '" onmouseout="hideTt()"></div>';
+      sc += '<div class="scatter-dot-label" style="' + labelStyle + '">' + item.model + '</div>';
+    });
+    document.getElementById('sChart').innerHTML = sc;
+
+    // Bar chart
+    var maxRBar = Math.max.apply(null, m.map(function(x) { return x.rating; }));
+    var minRBar = Math.min.apply(null, m.map(function(x) { return x.rating; })) - 20;
+    if (maxRBar === minRBar) minRBar = maxRBar - 100;
+
+    var maxVBar = Math.max.apply(null, scores);
+    var minVBar = Math.min.apply(null, scores) - 10;
+    if (minVBar < 0) minVBar = 0;
+    if (maxVBar === minVBar) minVBar = maxVBar - 10;
+
+    var maxInPrice = Math.max.apply(null, m.map(function(x) { return x.input_price_1M; })) || 1;
+    var maxOutPrice = Math.max.apply(null, m.map(function(x) { return x.output_price_1M; })) || 1;
+
+    var bc = '<div style="display:flex; gap:12px; margin-bottom:12px; font-size:.75em; color:#94a3b8; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; padding-bottom:8px; border-bottom:1px solid #2d3142">' +
+      '<div style="width:200px; text-align:left; cursor:pointer; user-select:none" onclick="setSort(\'name\')">Model ' + (currentSort === 'name' ? '↑' : (currentSort === 'name-desc' ? '↓' : '↕')) + '</div>' +
+      '<div style="flex:1; text-align:left; cursor:pointer; user-select:none" onclick="setSort(\'rating\')">Rating ' + (currentSort === 'rating-desc' ? '↓' : (currentSort === 'rating-asc' ? '↑' : '↕')) + '</div>' +
+      '<div style="flex:1; text-align:left; cursor:pointer; user-select:none" onclick="setSort(\'input\')">Input Price ' + (currentSort === 'input-desc' ? '↓' : (currentSort === 'input-asc' ? '↑' : '↕')) + '</div>' +
+      '<div style="flex:1; text-align:left; cursor:pointer; user-select:none" onclick="setSort(\'output\')">Output Price ' + (currentSort === 'output-desc' ? '↓' : (currentSort === 'output-asc' ? '↑' : '↕')) + '</div>' +
+      '<div style="flex:1; text-align:left; cursor:pointer; user-select:none" onclick="setSort(\'value\')">Value Score ' + (currentSort === 'value-desc' ? '↓' : (currentSort === 'value-asc' ? '↑' : '↕')) + ' <span class="info-icon" onclick="openModal(event)">ⓘ</span></div></div>';
+
+    m.forEach(function(x) {
+      var rPct = ((x.rating - minRBar) / (maxRBar - minRBar)) * 100;
+      if (rPct < 8) rPct = 8; if (rPct > 100) rPct = 100;
+
+      var vPct = ((getValueForPreset(x, preset) - minVBar) / (maxVBar - minVBar)) * 100;
+      if (vPct < 8) vPct = 8; if (vPct > 100) vPct = 100;
+
+      var inPct = (x.input_price_1M / maxInPrice) * 100;
+      if (x.input_price_1M > 0 && inPct < 8) inPct = 8;
+
+      var outPct = (x.output_price_1M / maxOutPrice) * 100;
+      if (x.output_price_1M > 0 && outPct < 8) outPct = 8;
+
+      var rColor = 'linear-gradient(90deg,#6366f1,#8b5cf6)';
+      var vColor = 'linear-gradient(90deg,#a78bfa,#c084fc)';
+      var inColor = 'linear-gradient(90deg,#10b981,#34d399)';
+      var outColor = 'linear-gradient(90deg,#e11d48,#fb7185)';
+
+      bc += '<div class="bar-row">' +
+        '<div class="bar-label-left" title="' + x.model + '">' + x.model + '</div>' +
+        '<div class="bar-track"><div class="bar-fill" style="width:' + rPct + '%; background:' + rColor + '"></div><div class="bar-val">' + x.rating.toFixed(1) + '</div></div>' +
+        '<div class="bar-track"><div class="bar-fill" style="width:' + inPct + '%; background:' + inColor + '"></div><div class="bar-val">$' + x.input_price_1M.toFixed(2) + '</div></div>' +
+        '<div class="bar-track"><div class="bar-fill" style="width:' + outPct + '%; background:' + outColor + '"></div><div class="bar-val">$' + x.output_price_1M.toFixed(2) + '</div></div>' +
+        '<div class="bar-track"><div class="bar-fill" style="width:' + vPct + '%; background:' + vColor + '"></div><div class="bar-val">' + Math.round(getValueForPreset(x, preset)) + '</div></div>' +
+        '</div>';
+    });
+    document.getElementById('bChart').innerHTML = bc;
+
+    // Table
+    var tb = '<table><thead><tr><th onclick="setSort(\'rating\')">#</th><th onclick="setSort(\'name\')">Model</th><th onclick="setSort(\'rating\')">Rating</th><th onclick="setSort(\'input\')">Input $/1M</th><th onclick="setSort(\'output\')">Output $/1M</th><th onclick="setSort(\'value\')">Value <span class="info-icon" onclick="openModal(event)">ⓘ</span></th></tr></thead><tbody>';
+    m.forEach(function(x, i) {
+      var rc = i === 0 ? ' rank-1' : i === 1 ? ' rank-2' : i === 2 ? ' rank-3' : '';
+      var rw = i === 0 ? ' rank-1-row' : i === 1 ? ' rank-2-row' : i === 2 ? ' rank-3-row' : '';
+      tb += '<tr class="' + rw + '"><td class="rank' + rc + '">' + (i + 1) + '</td><td class="model">' + x.model + '</td><td class="rating">' + x.rating.toFixed(1) + '</td><td class="price">$' + x.input_price_1M.toFixed(4) + '</td><td class="price">$' + x.output_price_1M.toFixed(4) + '</td><td style="color:#a78bfa; font-weight:700">' + Math.round(getValueForPreset(x, preset)) + '</td></tr>';
+    });
+    tb += '</tbody></table>';
+    document.getElementById('tbl').innerHTML = tb;
+    document.getElementById('modelCount').textContent = m.length;
+    document.getElementById('sTitle').textContent = 'Price vs Rating — ' + catName;
+    document.getElementById('bTitle').textContent = 'Top-' + (n === 0 ? m.length : n) + ' — ' + catName;
+  } catch(e) {
+    document.getElementById('sChart').innerHTML = '<div class="error-box">' + e.message + '</div>';
+  }
+}
+
+window.showTt = function(e, model, rating, price, value) {
+  var tt = document.getElementById('sTt');
+  if (!tt) return;
+  tt.style.display = 'block';
+  tt.innerHTML = '<strong>' + model + '</strong><br/>Rating: ' + rating + '<br/>Axis Price: $' + price.toFixed(4) + ' / 1M<br/>Value Score: ' + Math.round(value);
+  var rect = document.getElementById('sChart').getBoundingClientRect();
+  tt.style.left = (e.clientX - rect.left + 12) + 'px';
+  tt.style.top = (e.clientY - rect.top - 45) + 'px';
+};
+
+window.hideTt = function() {
+  var tt = document.getElementById('sTt');
+  if (tt) tt.style.display = 'none';
+};
+
+document.getElementById('catSel').addEventListener('change', upd);
+document.getElementById('topSel').addEventListener('change', upd);
+document.getElementById('presetSel').addEventListener('change', upd);
+
+document.getElementById('ptPrompt').addEventListener('click', function() {
+  pt = 'input';
+  document.getElementById('ptPrompt').classList.toggle('active', true);
+  document.getElementById('ptCompletion').classList.toggle('active', false);
+  upd();
+});
+document.getElementById('ptCompletion').addEventListener('click', function() {
+  pt = 'output';
+  document.getElementById('ptCompletion').classList.toggle('active', true);
+  document.getElementById('ptPrompt').classList.toggle('active', false);
+  upd();
+});
+
+window.onload = function() {
+  loadMeta();
+};
+</script>
+</body>
+</html>
