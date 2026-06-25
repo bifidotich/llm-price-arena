@@ -429,6 +429,57 @@
         user-select: none;
         letter-spacing: 0.2px;
       }
+     /* Mobile responsive */
+     @media (max-width: 768px) {
+       body { padding: 12px; }
+       .header { flex-wrap: wrap; gap: 8px; }
+       .header h1 { font-size: 1.3em; }
+       .header .badge { font-size: 0.6em; }
+       .subtitle { font-size: 0.85em; margin-bottom: 16px; }
+       .controls { flex-direction: column; gap: 10px; padding: 12px; }
+       .control-group { width: 100%; }
+       select { min-width: 0; width: 100%; font-size: 0.85em; }
+       .stats { margin-left: 0; width: 100%; justify-content: center; font-size: 0.75em; height: auto; padding: 6px 10px; }
+       .card { padding: 12px; }
+       .card h2 { font-size: 0.95em; }
+       .card-header-row { flex-direction: column; align-items: flex-start; }
+       .chart-container { height: 280px; }
+       #sChart { height: 400px; }
+       .barchart-scroll { overflow-x: auto; }
+       .bar-label-left { width: 120px; font-size: 0.72em; }
+       .bar-row { gap: 6px; }
+       .bar-track { height: 20px; }
+       .bar-val { font-size: 0.65em; }
+       .scatter-dot-label { max-width: 60px; font-size: 0.58em; }
+       .scatter-tooltip { font-size: 0.7em; max-width: 150px; }
+       .table-card { padding: 8px; }
+       table { font-size: 0.75em; }
+       th, td { padding: 8px 10px; }
+       .modal-content { padding: 16px; width: 95%; }
+       .modal-body { font-size: 0.8em; }
+       .update-ts { bottom: 6px; right: 8px; font-size: 0.5em; }
+     }
+     @media (max-width: 480px) {
+       body { padding: 8px; }
+       .header h1 { font-size: 1.1em; }
+       .controls { padding: 8px; border-radius: 8px; }
+       select { font-size: 0.8em; padding: 6px 8px; }
+       .card { padding: 8px; border-radius: 10px; }
+       .card h2 { font-size: 0.85em; }
+       .chart-container { height: 220px; }
+       #sChart { height: 320px; }
+       .bar-label-left { width: 80px; font-size: 0.65em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+       .bar-row { gap: 4px; }
+       .bar-track { height: 16px; }
+       .bar-val { font-size: 0.58em; right: 4px; }
+       .table-card { padding: 4px; }
+       table { font-size: 0.65em; }
+       th, td { padding: 6px 6px; }
+       .scatter-dot-label { display: none; }
+       .scatter-dot { width: 8px; height: 8px; }
+       .modal-content { padding: 12px; }
+       .modal-title { font-size: 0.95em; }
+     }
    </style>
 </head>
 <body>
