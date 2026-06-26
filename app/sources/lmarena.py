@@ -1,14 +1,9 @@
-"""Рейтинги из HF dataset lmarena-ai/leaderboard-dataset.
+"""Рейтинги из HF dataset lmarena-ai/leaderboard-dataset (конфиг text).
 
-ВАЖНО — сверить со схемой датасета перед боевым запуском:
-  python -c "from datasets import load_dataset; \
-             d = load_dataset('lmarena-ai/leaderboard-dataset', \
-                 'text_style_control', split='latest'); print(d.features); print(d[0])"
-
-TODO по результатам инспекции:
-  • точные имена колонок (ниже предполагаются model_name / rating / rank / category);
-  • реальные значения поля category для coding/math/research (в config.yaml — заглушки);
-  • есть ли смысл в filters= на стороне load_dataset (быстрее), либо фильтровать после.
+Схема (2026-06-26):
+  model_name (string) rating (float64) rank (float64)
+  category: overall, coding, english, creative_writing, chinese, frensh, german,
+            expert, hard_prompts, hard_prompts_english, industry_*
 """
 from __future__ import annotations
 
@@ -16,7 +11,8 @@ import os
 
 from datasets import load_dataset
 
-# Предполагаемые имена колонок — ПРОВЕРИТЬ (см. docstring).
+
+CONFIG = "text"
 COL_MODEL = "model_name"
 COL_RATING = "rating"
 COL_RANK = "rank"
@@ -25,22 +21,25 @@ COL_CATEGORY = "category"
 
 def fetch_ratings(
     dataset: str,
-    subset: str,
-    split: str,
-    category: str,
+    subset: str | None = None,
+    split: str = "latest",
+    category: str | None = None,
 ) -> list[dict]:
     """Возвращает [{"model": str, "rating": float, "rank": int}, ...] для категории."""
+    subset = subset or CONFIG
     token = os.environ.get("HF_TOKEN")
     ds = load_dataset(
         dataset,
         subset,
         split=split,
         token=token,
-        filters=[(COL_CATEGORY, "==", category)],  # TODO: убрать, если schema иная
+        streaming=True,
     )
 
     out: list[dict] = []
     for row in ds:
+        if category and row.get(COL_CATEGORY) != category:
+            continue
         try:
             out.append(
                 {
