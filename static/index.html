@@ -925,6 +925,22 @@ window.onload = function() {
   updateTimeDisplay();
   loadMeta();
 };
+
+// Subtle debug button: download unmatched models list
+document.getElementById('debugDownload').addEventListener('click', function() {
+  var a = document.createElement('a');
+  a.href = '/api/unmatched/download';
+  a.download = 'unmatched_models.txt';
+  a.click();
+});
 </script>
+
+<!-- Debug download button: barely visible, right bottom corner -->
+<button id="debugDownload"
+  style="position:fixed;bottom:8px;right:8px;background:transparent;color:#2d3142;border:none;font-size:11px;cursor:pointer;opacity:0.35;transition:opacity.3s;z-index:9999;"
+  title="Download unmatched models list"
+  onmouseover="this.style.opacity='0.8'"
+  onmouseout="this.style.opacity='0.35'">debug</button>
+
 </body>
 </html>

@@ -6,6 +6,7 @@ import time
 from datetime import datetime, timezone
 
 from .cache import Cache
+from .matcher import auto_match_all
 from .scoring import blended_price, value_score
 from .sources import lmarena, openrouter
 
@@ -19,31 +20,29 @@ def _now_iso() -> str:
 def build_snapshot(cfg: dict) -> dict:
     """Собирает полный снапшот по всем категориям и пресетам.
 
-    Источники тянутся независимо: сбой одного фиксируется в status, но не
-    отменяет другой. Сборка value требует обоих — если рейтинги не пришли,
-    отдаём пустые категории, но не падаем.
+    Матчинг LM Arena → OpenRouter полностью автоматический (4 слоя),
+    без ручных алиасов. Модели без матча попадают в unmatched.
     """
     sc = cfg["scoring"]
-    aliases: dict[str, str] = cfg.get("model_aliases") or {}
     or_cfg = cfg["sources"]["openrouter"]
     lm_cfg = cfg["sources"]["lmarena"]
 
     status = {"openrouter": "ok", "lmarena": "ok"}
 
-    # 1. Цены
+    # 1. OpenRouter цены (все модели, фетчим один раз)
     try:
         prices = openrouter.fetch_prices(or_cfg["url"])
-    except Exception as e:  # noqa: BLE001 — фиксируем и продолжаем
+    except Exception as e:  # noqa: BLE001
         log.warning("OpenRouter fetch failed: %s", e)
         prices, status["openrouter"] = {}, f"error: {e}"
 
     categories: dict[str, list[dict]] = {}
-    unmatched: set[str] = set()
+    all_unmatched: set[str] = set()
 
-    # 2. Рейтинги по категориям + матчинг + value
+    # 2. По каждой категории: рейтинги → матчинг → value
     for tab, spec in lm_cfg["categories"].items():
         try:
-            ratings = lmarena.fetch_ratings(
+            lm_models = lmarena.fetch_ratings(
                 lm_cfg["dataset"], spec["subset"], lm_cfg["split"], spec["category"]
             )
         except Exception as e:  # noqa: BLE001
@@ -52,18 +51,17 @@ def build_snapshot(cfg: dict) -> dict:
             categories[tab] = []
             continue
 
-        rows = []
-        for r in ratings:
-            or_id = aliases.get(r["model"])
-            price = prices.get(or_id) if or_id else None
-            if not price:
-                unmatched.add(r["model"])
-                continue
+        # Автоматический матчинг
+        matched_or, unmatched_lm = auto_match_all(lm_models, prices)
+        all_unmatched |= unmatched_lm
 
+        rows = []
+        for or_id, info in matched_or.items():
+            price = {"input": info["input"], "output": info["output"]}
             row = {
-                "model": r["model"],
-                "rating": r["rating"],
-                "rank": r["rank"],
+                "model": or_id,
+                "rating": info["rating"],
+                "rank": info["rank"],
                 "input_price_1M": round(price["input"], 4),
                 "output_price_1M": round(price["output"], 4),
                 "blended_price_1M": round(
@@ -73,7 +71,7 @@ def build_snapshot(cfg: dict) -> dict:
             }
             for preset, w in sc["presets"].items():
                 v = value_score(
-                    r["rating"], price["input"], price["output"],
+                    info["rating"], price["input"], price["output"],
                     anchor=sc["anchor"], token_share=sc["token_share"],
                     beta=w["beta"], gamma=w["gamma"],
                 )
@@ -85,7 +83,7 @@ def build_snapshot(cfg: dict) -> dict:
     return {
         "updated_at": _now_iso(),
         "status": status,
-        "unmatched": sorted(unmatched),
+        "unmatched": sorted(all_unmatched),
         "presets": list(sc["presets"].keys()),
         "default_preset": sc.get("default_preset", "balanced"),
         "categories": categories,

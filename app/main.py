@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 from .cache import make_cache
@@ -102,6 +102,18 @@ def meta():
         "updated_at": snap["updated_at"],
         "unmatched": snap["unmatched"],
     }
+
+
+@app.get("/api/unmatched/download")
+def unmatched_download():
+    """Скачать список моделей без матча (debug)."""
+    snap = _snapshot()
+    lines = [f"# unmatched models ({len(snap['unmatched'])} total)"]
+    for m in snap["unmatched"]:
+        lines.append(m)
+    return PlainTextResponse("\n".join(lines) + "\n", headers={
+        "Content-Disposition": "attachment; filename=unmatched_models.txt"
+    })
 
 
 # Статичный дашборд (index.html ходит в /api/models). Монтируем последним,

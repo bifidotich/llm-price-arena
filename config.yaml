@@ -40,10 +40,10 @@ sources:
   openrouter:
     url: https://openrouter.ai/api/v1/models
 
-# Маппинг имён LMArena -> id модели в OpenRouter.
-# Ключ — model_name из датасета, значение — id в OpenRouter (pricing берётся оттуда).
-# Это самое хрупкое место: имена не совпадают, часть моделей на OpenRouter нет.
-model_aliases:
+# Маппинг имён LMArena -> id модели в OpenRouter заменён на автоматический
+# (4-слойный матчинг в app/matcher.py). Ручные алиасы больше не нужны.
+# Этот раздел оставлен для обратной совместимости — код его не читает.
+model_aliases: # устарело
   claude-fable-5:                anthropic/claude-fable-5
   claude-opus-4-5-20251101:     anthropic/claude-opus-4.5
   claude-opus-4-6:              anthropic/claude-opus-4.6
