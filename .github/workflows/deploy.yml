@@ -35,6 +35,8 @@ jobs:
 
       - name: Deploy to VPS
         uses: appleboy/ssh-action@v1.2.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USER }}
@@ -46,7 +48,7 @@ jobs:
             IMAGE=ghcr.io/bifidotich/llm-price-arena:latest
 
             echo "[1/4] Authenticating with GHCR..."
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+            echo "$GITHUB_TOKEN" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
             echo "[2/4] Pulling latest image..."
             docker pull $IMAGE
