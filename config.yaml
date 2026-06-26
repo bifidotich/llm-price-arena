@@ -32,11 +32,11 @@ sources:
     # ВНИМАНИЕ: точные имена subset'ов/категорий нужно сверить с датасетом
     # (см. app/sources/lmarena.py — там TODO про инспекцию схемы).
     categories:
-      overall:  { subset: text_style_control, category: overall }
-      coding:   { subset: text_style_control, category: coding }
-      math:     { subset: text_style_control, category: math }
-      research: { subset: text_style_control, category: hard_6 }   # TODO: уточнить имя категории
-      agent:    { subset: text_style_control, category: agent }
+      overall:  { subset: text, category: overall }
+      coding:   { subset: text, category: coding }
+      math:     { subset: text, category: coding }                    # временно — math как coding
+      research: { subset: text, category: expert }
+      agent:    { subset: text, category: hard_prompts }              # временно — agent как hard
   openrouter:
     url: https://openrouter.ai/api/v1/models
 
