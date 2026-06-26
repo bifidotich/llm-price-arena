@@ -58,8 +58,26 @@ jobs:
             ufw allow 8000/tcp 2>/dev/null || true
             ufw reload 2>/dev/null || true
 
-            echo "[4/5] Installing Docker Compose plugin (if missing)..."
-            docker compose version >/dev/null 2>&1 || { apt-get update -qq && apt-get install -y -qq docker-compose-plugin 2>/dev/null || apt-get install -y -qq docker-compose 2>/dev/null || { echo "  Manual install of Docker Compose plugin..." && mkdir -p /usr/lib/docker/cli-plugins && curl -sL "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/lib/docker/cli-plugins/docker-compose && chmod +x /usr/lib/docker/cli-plugins/docker-compose; }; }
+            echo "[4/5] Installing Docker Compose (if missing)..."
+            if docker compose version >/dev/null 2>&1; then
+              COMPOSE_CMD="docker compose"
+            elif command -v docker-compose >/dev/null 2>&1; then
+              COMPOSE_CMD="docker-compose"
+            else
+              echo "  Installing Docker Compose plugin to ~/.docker/cli-plugins..."
+              mkdir -p ~/.docker/cli-plugins
+              curl -sL "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o ~/.docker/cli-plugins/docker-compose
+              chmod +x ~/.docker/cli-plugins/docker-compose
+              # Also try docker-compose v1 binary
+              curl -sL "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose 2>/dev/null || true
+              chmod +x /usr/local/bin/docker-compose 2>/dev/null || true
+              if docker compose version >/dev/null 2>&1; then
+                COMPOSE_CMD="docker compose"
+              else
+                COMPOSE_CMD="docker-compose"
+              fi
+            fi
+            echo "  Using: $COMPOSE_CMD"
 
             echo "[5/5] Deploying container..."
             cd $APP_DIR
@@ -73,7 +91,7 @@ jobs:
             echo '    volumes:' >> docker-compose.yml
             echo '      - ./data:/app/data' >> docker-compose.yml
             echo '    restart: unless-stopped' >> docker-compose.yml
-            docker compose up -d --pull always
+            $COMPOSE_CMD up -d --pull always
 
             echo "[6/6] Waiting for app to start (up to 90s)..."
             for i in $(seq 1 30); do
