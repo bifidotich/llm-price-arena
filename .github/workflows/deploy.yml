@@ -54,14 +54,11 @@ jobs:
             echo "[2/4] Ensuring app directory..."
             mkdir -p $APP_DIR/data
 
-            echo "[3/4] Deploying container..."
+            echo "[3/4] Installing Docker Compose plugin (if missing)..."
+            docker compose version >/dev/null 2>&1 || apt-get update -qq && apt-get install -y -qq docker-compose-plugin
+
+            echo "[4/4] Deploying container..."
             cd $APP_DIR
-            # Detect compose command (v2 plugin or v1 standalone)
-            COMPOSE_CMD="docker compose"
-            if ! docker compose version >/dev/null 2>&1; then
-              COMPOSE_CMD="docker-compose"
-              echo "  Using docker-compose (v1) instead of docker compose (v2)"
-            fi
             echo "services:" > docker-compose.yml
             echo "  app:" >> docker-compose.yml
             echo "    image: $IMAGE" >> docker-compose.yml
