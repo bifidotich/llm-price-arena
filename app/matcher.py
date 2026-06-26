@@ -224,6 +224,11 @@ def auto_match_all(
         name_part = parts[-1].rstrip(":free")
         or_by_org.setdefault(org, []).append({"id": m["id"], "name": name_part})
 
+    # Reverse lookup: полный OR ID -> нормализованное имя (для поиска цены)
+    norm_by_id: dict[str, str] = {}
+    for n, info in or_by_norm.items():
+        norm_by_id[info["id"]] = n
+
     matched: dict[str, dict] = {}
     unmatched: set[str] = set()
 
@@ -234,8 +239,9 @@ def auto_match_all(
 
         or_id = _match_single(lm_name, lm_norm, lm_org, or_by_norm, hf_to_or, or_by_org)
 
-        if or_id and or_id in or_by_norm:
-            price = or_by_norm[or_id]["price"]
+        norm_key = norm_by_id.get(or_id) if or_id else None
+        if norm_key and norm_key in or_by_norm:
+            price = or_by_norm[norm_key]["price"]
             if or_id not in matched:  # первый матч
                 matched[or_id] = {
                     "input": price["input"],
