@@ -48,10 +48,13 @@ jobs:
             IMAGE=ghcr.io/bifidotich/llm-price-arena:latest
 
             echo "[1/4] Pulling latest image from GHCR..."
-            # Пакет публичный, авторизация через GITHUB_TOKEN в step-level env:
-            echo "$GITHUB_TOKEN" | docker login ghcr.io -u ${{ github.actor }} --password-stdin 2>/dev/null || true
-
-            docker pull $IMAGE
+            # Clear stale credentials then pull (package is public)
+            docker logout ghcr.io 2>/dev/null || true
+            docker pull $IMAGE || {
+              echo "  ⚠ Public pull failed, trying auth with GITHUB_TOKEN..."
+              echo "$GITHUB_TOKEN" | docker login ghcr.io -u ${{ github.actor }} --password-stdin 2>/dev/null || true
+              docker pull $IMAGE
+            }
 
             echo "[3/4] Ensuring app directory..."
             mkdir -p $APP_DIR/data
