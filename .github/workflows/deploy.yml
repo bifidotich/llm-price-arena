@@ -51,13 +51,13 @@ jobs:
             echo "[2/4] Pulling latest image..."
             docker pull $IMAGE
 
-            echo "[2/4] Ensuring app directory..."
+            echo "[3/4] Ensuring app directory..."
             mkdir -p $APP_DIR/data
 
-            echo "[3/4] Installing Docker Compose plugin (if missing)..."
-            docker compose version >/dev/null 2>&1 || apt-get update -qq && apt-get install -y -qq docker-compose-plugin
+            echo "[4/4] Installing Docker Compose plugin (if missing)..."
+            docker compose version >/dev/null 2>&1 || (apt-get update -qq && apt-get install -y -qq docker-compose-plugin)
 
-            echo "[4/4] Deploying container..."
+            echo "[5/5] Deploying container..."
             cd $APP_DIR
             echo "services:" > docker-compose.yml
             echo "  app:" >> docker-compose.yml
@@ -69,9 +69,9 @@ jobs:
             echo '    volumes:' >> docker-compose.yml
             echo '      - ./data:/app/data' >> docker-compose.yml
             echo '    restart: unless-stopped' >> docker-compose.yml
-            $COMPOSE_CMD up -d --pull always
+            docker compose up -d --pull always
 
-            echo "[4/4] Waiting for app to start (up to 90s)..."
+            echo "[6/6] Waiting for app to start (up to 90s)..."
             for i in $(seq 1 30); do
               sleep 3
               STATUS=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/api/health 2>/dev/null || echo "000")
