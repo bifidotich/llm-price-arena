@@ -62,43 +62,19 @@ jobs:
             ufw allow 8000/tcp 2>/dev/null || true
             ufw reload 2>/dev/null || true
 
-            echo "[4/5] Installing Docker Compose (if missing)..."
-            if docker compose version >/dev/null 2>&1; then
-              COMPOSE_CMD="docker compose"
-              COMPOSE_PULL="--pull always"
-            elif command -v docker-compose >/dev/null 2>&1; then
-              COMPOSE_CMD="docker-compose"
-              COMPOSE_PULL=""
-            else
-              echo "  Installing Docker Compose plugin to ~/.docker/cli-plugins..."
-              mkdir -p ~/.docker/cli-plugins
-              curl -sL "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o ~/.docker/cli-plugins/docker-compose
-              chmod +x ~/.docker/cli-plugins/docker-compose
-              # Also try docker-compose v1 binary
-              curl -sL "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose 2>/dev/null || true
-              chmod +x /usr/local/bin/docker-compose 2>/dev/null || true
-              if docker compose version >/dev/null 2>&1; then
-                COMPOSE_CMD="docker compose"
-              else
-                COMPOSE_CMD="docker-compose"
-              fi
-            fi
-            echo "  Using: $COMPOSE_CMD"
+            echo "[4/5] Stopping old container..."
+            docker stop llm-price-arena 2>/dev/null || true
+            docker rm llm-price-arena 2>/dev/null || true
 
-            echo "[5/5] Deploying container..."
-            cd $APP_DIR
-            echo "version: '3'" > docker-compose.yml
-            echo "services:" >> docker-compose.yml
-            echo "  app:" >> docker-compose.yml
-            echo "    image: $IMAGE" >> docker-compose.yml
-            echo '    ports:' >> docker-compose.yml
-            echo '      - "8000:8000"' >> docker-compose.yml
-            echo '    env_file:' >> docker-compose.yml
-            echo '      - .env' >> docker-compose.yml || true
-            echo '    volumes:' >> docker-compose.yml
-            echo '      - ./data:/app/data' >> docker-compose.yml
-            echo '    restart: unless-stopped' >> docker-compose.yml
-            $COMPOSE_CMD up -d $COMPOSE_PULL
+            echo "[5/5] Running new container..."
+            touch $APP_DIR/.env 2>/dev/null || true
+            docker run -d \
+              --name llm-price-arena \
+              --restart unless-stopped \
+              -p 8000:8000 \
+              --env-file $APP_DIR/.env \
+              -v $APP_DIR/data:/app/data \
+              $IMAGE
 
             echo "[6/6] Waiting for app to start (up to 90s)..."
             for i in $(seq 1 30); do
