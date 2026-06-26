@@ -97,11 +97,15 @@ ORG_MAP: dict[str, str] = {
 # ============================================================
 
 
+PER_MILLION = 1_000_000
+
+
 def index_openrouter(or_models: list[dict]) -> tuple[dict[str, dict], dict[str, str]]:
     """Индексирует OpenRouter: возвращает (by_norm, hf_to_or).
 
     by_norm: {нормализованное_имя: {or_id, price, org}}
     hf_to_or: {нормализованное_имя_из_hf: or_id}
+    Цены в $/1M токенов (согласованно с openrouter.fetch_prices).
     """
     by_norm: dict[str, dict] = {}
     hf_to_or: dict[str, str] = {}
@@ -116,8 +120,8 @@ def index_openrouter(or_models: list[dict]) -> tuple[dict[str, dict], dict[str, 
 
         pricing = m.get("pricing", {})
         price_data = {
-            "input": float(pricing.get("prompt", 0)),
-            "output": float(pricing.get("completion", 0)),
+            "input": float(pricing.get("prompt", 0)) * PER_MILLION,
+            "output": float(pricing.get("completion", 0)) * PER_MILLION,
         }
 
         # Основной индекс по нормализованному имени (без организации)
