@@ -47,10 +47,10 @@ jobs:
             APP_DIR=/opt/llm-price-arena
             IMAGE=ghcr.io/bifidotich/llm-price-arena:latest
 
-            echo "[1/4] Authenticating with GHCR..."
-            echo "$GITHUB_TOKEN" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            echo "[1/4] Pulling latest image from GHCR..."
+            # Пакет публичный, авторизация через GITHUB_TOKEN в step-level env:
+            echo "$GITHUB_TOKEN" | docker login ghcr.io -u ${{ github.actor }} --password-stdin 2>/dev/null || true
 
-            echo "[2/4] Pulling latest image..."
             docker pull $IMAGE
 
             echo "[3/4] Ensuring app directory..."
