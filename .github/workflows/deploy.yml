@@ -1,6 +1,5 @@
 name: Deploy LLM Price Arena
 
-n# Test deploy with updated SSH key - 2026-06-26
 on:
   push:
     branches: [main]
