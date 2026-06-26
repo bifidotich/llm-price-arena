@@ -43,7 +43,7 @@ jobs:
           script: |
             set -e
             APP_DIR=/opt/llm-price-arena
-            IMAGE=ghcr.io/${{ github.repository }}:latest
+            IMAGE=ghcr.io/bifidotich/llm-price-arena:latest
 
             echo "[1/4] Pulling latest image..."
             docker pull $IMAGE
@@ -53,18 +53,16 @@ jobs:
 
             echo "[3/4] Deploying container..."
             cd $APP_DIR
-            cat > docker-compose.yml << 'DOCKERCOMPOSE'
-services:
-  app:
-    image: ghcr.io/bifidotich/llm-price-arena:latest
-    ports:
-      - "${SERVER__PORT:-8000}:8000"
-    env_file:
-      - .env
-    volumes:
-      - ./data:/app/data
-    restart: unless-stopped
-DOCKERCOMPOSE
+            echo "services:" > docker-compose.yml
+            echo "  app:" >> docker-compose.yml
+            echo "    image: $IMAGE" >> docker-compose.yml
+            echo '    ports:' >> docker-compose.yml
+            echo '      - "${SERVER__PORT:-8000}:8000"' >> docker-compose.yml
+            echo '    env_file:' >> docker-compose.yml
+            echo '      - .env' >> docker-compose.yml
+            echo '    volumes:' >> docker-compose.yml
+            echo '      - ./data:/app/data' >> docker-compose.yml
+            echo '    restart: unless-stopped' >> docker-compose.yml
             docker compose up -d --pull always
 
             echo "[4/4] Health check..."
