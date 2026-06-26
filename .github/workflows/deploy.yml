@@ -45,15 +45,18 @@ jobs:
             APP_DIR=/opt/llm-price-arena
             IMAGE=ghcr.io/bifidotich/llm-price-arena:latest
 
-            echo "[1/4] Authenticating with GHCR (direct config.json)..."
+            echo "[1/5] Cleaning up disk space on VPS..."
+            docker system prune -af --volumes || true
+
+            echo "[2/5] Authenticating with GHCR (direct config.json)..."
             mkdir -p ~/.docker
             echo "{\"auths\":{\"ghcr.io\":{\"auth\":\"$(echo -n "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" | base64 -w0)\"}}}}" > ~/.docker/config.json
             docker pull $IMAGE
 
-            echo "[3/4] Ensuring app directory..."
+            echo "[3/5] Ensuring app directory..."
             mkdir -p $APP_DIR/data
 
-            echo "[4/4] Installing Docker Compose plugin (if missing)..."
+            echo "[4/5] Installing Docker Compose plugin (if missing)..."
             docker compose version >/dev/null 2>&1 || (apt-get update -qq && apt-get install -y -qq docker-compose-plugin)
 
             echo "[5/5] Deploying container..."
