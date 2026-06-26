@@ -26,7 +26,9 @@ jobs:
         with:
           context: .
           push: true
-          tags: ghcr.io/${{ github.repository }}:latest
+          tags: |
+            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/${{ github.repository }}:${{ github.sha }}
 
       - name: Deploy to VPS
         uses: appleboy/ssh-action@v1.2.0
@@ -37,13 +39,21 @@ jobs:
           port: ${{ secrets.PORT || '22' }}
           script: |
             set -e
-            echo "Pulling latest image..."
-            docker pull ghcr.io/${{ github.repository }}:latest
-            cd /opt/llm-price-arena || mkdir -p /opt/llm-price-arena
-            cat > docker-compose.yml << 'EOF'
+            APP_DIR=/opt/llm-price-arena
+            IMAGE=ghcr.io/${{ github.repository }}:latest
+
+            echo "[1/4] Pulling latest image..."
+            docker pull $IMAGE
+
+            echo "[2/4] Ensuring app directory..."
+            mkdir -p $APP_DIR/data
+
+            echo "[3/4] Deploying container..."
+            cd $APP_DIR
+            cat > docker-compose.yml << 'DOCKERCOMPOSE'
 services:
   app:
-    image: ghcr.io/${{ github.repository }}:latest
+    image: ghcr.io/bifidotich/llm-price-arena:latest
     ports:
       - "${SERVER__PORT:-8000}:8000"
     env_file:
@@ -51,7 +61,17 @@ services:
     volumes:
       - ./data:/app/data
     restart: unless-stopped
-EOF
-            echo "Starting container..."
-            docker compose up -d
+DOCKERCOMPOSE
+            docker compose up -d --pull always
+
+            echo "[4/4] Health check..."
+            for i in $(seq 1 15); do
+              sleep 2
+              STATUS=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/api/health 2>/dev/null || echo "000")
+              if [ "$STATUS" = "200" ]; then
+                echo "  ✅ App is healthy!"
+                break
+              fi
+              echo "  Attempt $i/15 — HTTP $STATUS"
+            done
             echo "✅ Deploy complete"
