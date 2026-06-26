@@ -35,6 +35,9 @@ jobs:
 
       - name: Deploy to VPS
         uses: appleboy/ssh-action@v1.2.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USER }}
@@ -83,7 +86,8 @@ jobs:
 
             echo "[5/5] Deploying container..."
             cd $APP_DIR
-            echo "services:" > docker-compose.yml
+            echo "version: '3'" > docker-compose.yml
+            echo "services:" >> docker-compose.yml
             echo "  app:" >> docker-compose.yml
             echo "    image: $IMAGE" >> docker-compose.yml
             echo '    ports:' >> docker-compose.yml
