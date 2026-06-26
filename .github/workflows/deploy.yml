@@ -61,8 +61,10 @@ jobs:
             echo "[4/5] Installing Docker Compose (if missing)..."
             if docker compose version >/dev/null 2>&1; then
               COMPOSE_CMD="docker compose"
+              COMPOSE_PULL="--pull always"
             elif command -v docker-compose >/dev/null 2>&1; then
               COMPOSE_CMD="docker-compose"
+              COMPOSE_PULL=""
             else
               echo "  Installing Docker Compose plugin to ~/.docker/cli-plugins..."
               mkdir -p ~/.docker/cli-plugins
@@ -85,13 +87,13 @@ jobs:
             echo "  app:" >> docker-compose.yml
             echo "    image: $IMAGE" >> docker-compose.yml
             echo '    ports:' >> docker-compose.yml
-            echo '      - "${SERVER__PORT:-8000}:8000"' >> docker-compose.yml
+            echo '      - "8000:8000"' >> docker-compose.yml
             echo '    env_file:' >> docker-compose.yml
-            echo '      - .env' >> docker-compose.yml
+            echo '      - .env' >> docker-compose.yml || true
             echo '    volumes:' >> docker-compose.yml
             echo '      - ./data:/app/data' >> docker-compose.yml
             echo '    restart: unless-stopped' >> docker-compose.yml
-            $COMPOSE_CMD up -d --pull always
+            $COMPOSE_CMD up -d $COMPOSE_PULL
 
             echo "[6/6] Waiting for app to start (up to 90s)..."
             for i in $(seq 1 30); do
@@ -105,7 +107,7 @@ jobs:
               echo "  Attempt $i/30 — HTTP $STATUS"
             done
             echo "  ❌ Health check failed. Container logs:"
-            docker compose logs --tail=50 2>/dev/null || true
+            $COMPOSE_CMD logs --tail=50 2>/dev/null || true
             echo "  ❌ Container status:"
             docker ps -a 2>/dev/null || true
             exit 1
