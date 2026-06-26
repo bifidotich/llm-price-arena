@@ -56,6 +56,12 @@ jobs:
 
             echo "[3/4] Deploying container..."
             cd $APP_DIR
+            # Detect compose command (v2 plugin or v1 standalone)
+            COMPOSE_CMD="docker compose"
+            if ! docker compose version >/dev/null 2>&1; then
+              COMPOSE_CMD="docker-compose"
+              echo "  Using docker-compose (v1) instead of docker compose (v2)"
+            fi
             echo "services:" > docker-compose.yml
             echo "  app:" >> docker-compose.yml
             echo "    image: $IMAGE" >> docker-compose.yml
@@ -66,7 +72,7 @@ jobs:
             echo '    volumes:' >> docker-compose.yml
             echo '      - ./data:/app/data' >> docker-compose.yml
             echo '    restart: unless-stopped' >> docker-compose.yml
-            docker compose up -d --pull always
+            $COMPOSE_CMD up -d --pull always
 
             echo "[4/4] Waiting for app to start (up to 90s)..."
             for i in $(seq 1 30); do
