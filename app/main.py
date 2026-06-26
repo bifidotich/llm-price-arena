@@ -20,14 +20,19 @@ cache = make_cache(CONFIG["cache"])
 scheduler = BackgroundScheduler(timezone="UTC")
 
 
+import threading
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     wcfg = CONFIG["worker"]
     if wcfg.get("warm_on_start", True) and cache.read() is None:
-        try:
-            refresh(CONFIG, cache)
-        except Exception as e:  # noqa: BLE001
-            log.error("warm-up refresh failed: %s", e)
+        def _warm():
+            try:
+                refresh(CONFIG, cache)
+            except Exception as e:  # noqa: BLE001
+                log.error("warm-up refresh failed: %s", e)
+        threading.Thread(target=_warm, daemon=True).start()
 
     scheduler.add_job(
         lambda: refresh(CONFIG, cache),
@@ -82,13 +87,12 @@ def get_models(
 @app.get("/api/health")
 def health():
     snap = cache.read()
-    if snap is None:
-        return JSONResponse({"ready": False}, status_code=503)
+    ready = snap is not None
     return {
-        "ready": True,
-        "updated_at": snap["updated_at"],
-        "status": snap["status"],
-        "unmatched_count": len(snap["unmatched"]),
+        "ready": ready,
+        "updated_at": snap["updated_at"] if snap else None,
+        "status": snap["status"] if snap else {"openrouter": "loading", "lmarena": "loading"},
+        "unmatched_count": len(snap["unmatched"]) if snap else 0,
     }
 
 
