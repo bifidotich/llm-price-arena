@@ -29,12 +29,26 @@ def build_snapshot(cfg: dict) -> dict:
 
     status = {"openrouter": "ok", "lmarena": "ok"}
 
-    # 1. OpenRouter цены (все модели, фетчим один раз)
+    PER_MILLION = 1_000_000
+
+    # 1. OpenRouter: raw модели для матчинга + цены
+    raw_models: list[dict] = []
+    prices: dict[str, dict[str, float]] = {}
     try:
-        prices = openrouter.fetch_prices(or_cfg["url"])
+        raw_models = openrouter.fetch_raw_models(or_cfg["url"])
+        for item in raw_models:
+            model_id = item.get("id")
+            pricing = item.get("pricing") or {}
+            try:
+                prompt = float(pricing.get("prompt", 0)) * PER_MILLION
+                completion = float(pricing.get("completion", 0)) * PER_MILLION
+            except (TypeError, ValueError):
+                continue
+            if model_id and prompt > 0:
+                prices[model_id] = {"input": prompt, "output": completion}
     except Exception as e:  # noqa: BLE001
         log.warning("OpenRouter fetch failed: %s", e)
-        prices, status["openrouter"] = {}, f"error: {e}"
+        status["openrouter"] = f"error: {e}"
 
     categories: dict[str, list[dict]] = {}
     all_unmatched: set[str] = set()
@@ -51,8 +65,8 @@ def build_snapshot(cfg: dict) -> dict:
             categories[tab] = []
             continue
 
-        # Автоматический матчинг
-        matched_or, unmatched_lm = auto_match_all(lm_models, prices)
+        # Автоматический матчинг (передаём raw OpenRouter модели, не prices dict)
+        matched_or, unmatched_lm = auto_match_all(lm_models, raw_models)
         all_unmatched |= unmatched_lm
 
         rows = []

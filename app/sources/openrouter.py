@@ -14,15 +14,23 @@ import httpx
 PER_MILLION = 1_000_000
 
 
-def fetch_prices(url: str, timeout: float = 30.0) -> dict[str, dict[str, float]]:
-    """Возвращает {openrouter_id: {"input": $/1M, "output": $/1M}}."""
+def fetch_raw_models(url: str, timeout: float = 30.0) -> list[dict]:
+    """Возвращает raw список моделей из OpenRouter API.
+
+    Используется для автоматического матчинга (matcher.py).
+    """
     headers = {}
     if key := os.environ.get("OPENROUTER_API_KEY"):
         headers["Authorization"] = f"Bearer {key}"
 
     resp = httpx.get(url, headers=headers, timeout=timeout)
     resp.raise_for_status()
-    data = resp.json().get("data", [])
+    return resp.json().get("data", [])
+
+
+def fetch_prices(url: str, timeout: float = 30.0) -> dict[str, dict[str, float]]:
+    """Возвращает {openrouter_id: {"input": $/1M, "output": $/1M}}."""
+    data = fetch_raw_models(url, timeout=timeout)
 
     prices: dict[str, dict[str, float]] = {}
     for item in data:
