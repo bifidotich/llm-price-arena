@@ -56,8 +56,9 @@ jobs:
             echo "{\"auths\":{\"ghcr.io\":{\"auth\":\"$(echo -n "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" | base64 -w0)\"}}}}" > ~/.docker/config.json
             docker pull $IMAGE
 
-            echo "[3/5] Ensuring app directory and opening firewall port 8000..."
+            echo "[3/5] Ensuring app directory and clearing old cache (forces fresh data fetch)..."
             mkdir -p $APP_DIR/data
+            rm -f $APP_DIR/data/*.json $APP_DIR/data/*.pickle 2>/dev/null || true
             ufw allow 8000/tcp 2>/dev/null || true
             ufw reload 2>/dev/null || true
 
