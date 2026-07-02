@@ -800,75 +800,95 @@ async function upd() {
       sc += '<div class="scatter-dot-label" style="' + labelStyle + '">' + item.model + '</div>';
     });
 
-    // Trend line (Theil-Sen median-based regression: Rating = a * ln(Price) + b)
-    var regData = [];
+    // Trend line (Efficient Frontier / Concave Envelope)
+    var pts = [];
     sc_m.forEach(function(item) {
       var price = pt === 'input' ? item.input_price_1M : item.output_price_1M;
-      if (price > 0 && item.rating > 0) {
-        regData.push({x: Math.log(price), y: item.rating});
+      if (price >= 0 && item.rating > 0) {
+        pts.push({p: price, r: item.rating});
       }
     });
     
-    if (regData.length > 1) {
-      var n = regData.length;
-      var slopes = [];
-      for (var i = 0; i < n; i++) {
-        for (var j = i + 1; j < n; j++) {
-          var dx = regData[j].x - regData[i].x;
-          if (Math.abs(dx) > 1e-9) {
-            slopes.push((regData[j].y - regData[i].y) / dx);
+    pts.sort(function(a, b) {
+      if (a.p === b.p) return b.r - a.r;
+      return a.p - b.p;
+    });
+    
+    var frontier = [];
+    var maxR = -Infinity;
+    pts.forEach(function(pt) {
+      if (pt.r > maxR) {
+        frontier.push(pt);
+        maxR = pt.r;
+      }
+    });
+    
+    var hull = [];
+    if (frontier.length > 0) {
+      hull.push(frontier[0]);
+      if (frontier.length > 1) {
+        hull.push(frontier[1]);
+        for (var i = 2; i < frontier.length; i++) {
+          var pCurr = frontier[i];
+          while (hull.length >= 2) {
+            var pLast = hull[hull.length - 1];
+            var pPrev = hull[hull.length - 2];
+            var slope1 = (pLast.r - pPrev.r) / (pLast.p - pPrev.p);
+            var slope2 = (pCurr.r - pLast.r) / (pCurr.p - pLast.p);
+            if (slope2 >= slope1) {
+              hull.pop();
+            } else {
+              break;
+            }
           }
+          hull.push(pCurr);
         }
+      }
+    }
+    
+    if (hull.length > 1) {
+      var svgPath = '';
+      var derivPath = '';
+      
+      hull.forEach(function(pt, i) {
+        var px = padL + ((pt.p - minP) / (maxP - minP)) * innerW;
+        var py = padT + innerH - ((pt.r - minR) / (maxR - minR)) * innerH;
+        if (i === 0) svgPath += 'M ' + px + ' ' + py + ' ';
+        else svgPath += 'L ' + px + ' ' + py + ' ';
+      });
+      
+      var derivs = [];
+      var maxD = 0;
+      for (var i = 1; i < hull.length; i++) {
+        var dp = hull[i].p - hull[i-1].p;
+        var dr = hull[i].r - hull[i-1].r;
+        var d = dr / dp;
+        derivs.push(d);
+        if (d > maxD) maxD = d;
+      }
+      if (maxD === 0) maxD = 1;
+      
+      for (var i = 1; i < hull.length; i++) {
+        var p1 = hull[i-1].p;
+        var p2 = hull[i].p;
+        var d = derivs[i-1];
+        
+        var px1 = padL + ((p1 - minP) / (maxP - minP)) * innerW;
+        var px2 = padL + ((p2 - minP) / (maxP - minP)) * innerW;
+        var py_d = padT + innerH - (d / maxD) * (innerH * 0.4);
+        
+        if (i === 1) {
+          derivPath += 'M ' + px1 + ' ' + py_d + ' ';
+        } else {
+          derivPath += 'L ' + px1 + ' ' + py_d + ' ';
+        }
+        derivPath += 'L ' + px2 + ' ' + py_d + ' ';
       }
       
-      if (slopes.length > 0) {
-        slopes.sort(function(a, b) { return a - b; });
-        var slope = slopes.length % 2 === 0 
-          ? (slopes[slopes.length / 2 - 1] + slopes[slopes.length / 2]) / 2 
-          : slopes[Math.floor(slopes.length / 2)];
-          
-        var intercepts = regData.map(function(pt) { return pt.y - slope * pt.x; });
-        intercepts.sort(function(a, b) { return a - b; });
-        var intercept = intercepts.length % 2 === 0
-          ? (intercepts[intercepts.length / 2 - 1] + intercepts[intercepts.length / 2]) / 2
-          : intercepts[Math.floor(intercepts.length / 2)];
-        
-        var svgPath = '';
-        var derivPath = '';
-        var steps = 100;
-        var started = false;
-        var startedD = false;
-        
-        var dMinPrice = minP + ((maxP - minP) / steps) * 1;
-        if (dMinPrice <= 0.0001) dMinPrice = 0.0001;
-        var maxD = Math.max(0.1, Math.abs(slope / dMinPrice));
-        
-        for (var i = 0; i <= steps; i++) {
-          var p = minP + ((maxP - minP) / steps) * i;
-          if (p <= 0.0001) p = 0.0001;
-          
-          var px = padL + ((p - minP) / (maxP - minP)) * innerW;
-          
-          // Main curve
-          var estR = slope * Math.log(p) + intercept;
-          var py = padT + innerH - ((estR - minR) / (maxR - minR)) * innerH;
-          if (!started) { svgPath += 'M ' + px + ' ' + py + ' '; started = true; }
-          else { svgPath += 'L ' + px + ' ' + py + ' '; }
-          
-          // Derivative curve (scaled to bottom 40% of chart)
-          var d = Math.abs(slope / p);
-          var py_d = padT + innerH - (d / maxD) * (innerH * 0.4);
-          if (!startedD) { derivPath += 'M ' + px + ' ' + py_d + ' '; startedD = true; }
-          else { derivPath += 'L ' + px + ' ' + py_d + ' '; }
-        }
-        
-        if (svgPath) {
-          sc += '<svg style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:0; overflow:hidden;">' +
-                '<path d="' + svgPath + '" fill="none" stroke="rgba(99, 102, 241, 0.5)" stroke-width="2" stroke-dasharray="6,4" />' +
-                '<path d="' + derivPath + '" fill="none" stroke="rgba(16, 185, 129, 0.5)" stroke-width="2" />' +
-                '</svg>';
-        }
-      }
+      sc += '<svg style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:0; overflow:hidden;">' +
+            '<path d="' + svgPath + '" fill="none" stroke="rgba(99, 102, 241, 0.5)" stroke-width="2" stroke-dasharray="6,4" />' +
+            '<path d="' + derivPath + '" fill="none" stroke="rgba(16, 185, 129, 0.5)" stroke-width="2" />' +
+            '</svg>';
     }
 
     document.getElementById('sChart').innerHTML = sc;
