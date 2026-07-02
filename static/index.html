@@ -531,13 +531,16 @@
     <span class="modal-close" onclick="closeModal()">&times;</span>
     <div class="modal-title">Экономическая выгода модели (Value Score)</div>
     <div class="modal-body">
-      Расчет построен на основе теории вероятностей (шкала Elo):
-      <div class="modal-formula" id="modalFormula">(WinProb^β / BlendedPrice^γ) * 100</div>
+      Алгоритм Экспоненциальной Эффективной Цены (Exponential Effective Price):
+      <div class="modal-formula" id="modalFormula">100 / (Price_eff^γ)</div>
+      Где Price_eff = BlendedPrice * e^(-k * Δ)
+      <br>Δ = Rating - MedianTopN
+      <br><br>
       Текущие параметры весов:
-      <br>• <strong id="modalBeta">β = 1.0</strong> — чувствительность к качеству (Elo).
+      <br>• <strong id="modalK">k = 0.01</strong> — чувствительность к рейтингу (штраф/награда за отличие от медианы).
       <br>• <strong id="modalGamma">γ = 0.5</strong> — чувствительность к цене.
       <hr style="margin: 10px 0; border: 0; border-top: 1px solid #2d3142;">
-      • <strong>WinProb</strong> — вероятность победы над базовым якорем (1400 Elo).
+      • <strong>MedianTopN</strong> — медианный рейтинг топ-моделей в категории (подсвечена в таблице).
       <br>• <strong>BlendedPrice</strong> — средневзвешенная стоимость 1M токенов (75% вход / 25% выход).
     </div>
   </div>
@@ -549,7 +552,7 @@ let currentSort = 'value-desc';
 let metaData = { categories: [], presets: {}, default_preset: 'balanced' };
 
 const CAT_NAMES = { overall:'Overall', coding:'Coding', math:'Math', research:'Research', agent:'Agentic' };
-const PRESETS = { quality: { label:'Quality-first', beta:2.0, gamma:0.3 }, balanced: { label:'Balanced', beta:1.0, gamma:0.5 }, budget: { label:'Budget-focused', beta:1.0, gamma:1.0 } };
+const PRESETS = { quality: { label:'Quality-first', k:0.015, gamma:0.3 }, balanced: { label:'Balanced', k:0.01, gamma:0.5 }, budget: { label:'Budget-focused', k:0.005, gamma:1.0 } };
 
 async function loadMeta() {
   try {
@@ -622,9 +625,9 @@ window.openModal = function(e) {
   if (e) e.stopPropagation();
   const activePreset = metaData.default_preset || 'balanced';
   const p = PRESETS[activePreset] || PRESETS.balanced;
-  document.getElementById('modalBeta').textContent = 'β = ' + p.beta.toFixed(1);
+  document.getElementById('modalK').textContent = 'k = ' + p.k.toFixed(3);
   document.getElementById('modalGamma').textContent = 'γ = ' + p.gamma.toFixed(1);
-  document.getElementById('modalFormula').textContent = '(WinProb^' + p.beta.toFixed(1) + ' / BlendedPrice^' + p.gamma.toFixed(1) + ') * 100';
+  document.getElementById('modalFormula').textContent = '100 / (Price_eff^' + p.gamma.toFixed(1) + ')';
   document.getElementById('infoModal').style.display = 'flex';
 };
 
@@ -810,8 +813,9 @@ async function upd() {
       var inColor = 'linear-gradient(90deg,#10b981,#34d399)';
       var outColor = 'linear-gradient(90deg,#e11d48,#fb7185)';
 
+      var bName = x.is_median ? '<span style="color:#f59e0b" title="Median Model">★</span> ' + x.model : x.model;
       bc += '<div class="bar-row">' +
-        '<div class="bar-label-left" title="' + x.model + '">' + x.model + '</div>' +
+        '<div class="bar-label-left" title="' + x.model + '">' + bName + '</div>' +
         '<div class="bar-track"><div class="bar-fill" style="width:' + rPct + '%; background:' + rColor + '"></div><div class="bar-val">' + x.rating.toFixed(1) + '</div></div>' +
         '<div class="bar-track"><div class="bar-fill" style="width:' + inPct + '%; background:' + inColor + '"></div><div class="bar-val">$' + x.input_price_1M.toFixed(2) + '</div></div>' +
         '<div class="bar-track"><div class="bar-fill" style="width:' + outPct + '%; background:' + outColor + '"></div><div class="bar-val">$' + x.output_price_1M.toFixed(2) + '</div></div>' +
@@ -825,7 +829,9 @@ async function upd() {
     m.forEach(function(x, i) {
       var rc = i === 0 ? ' rank-1' : i === 1 ? ' rank-2' : i === 2 ? ' rank-3' : '';
       var rw = i === 0 ? ' rank-1-row' : i === 1 ? ' rank-2-row' : i === 2 ? ' rank-3-row' : '';
-      tb += '<tr class="' + rw + '"><td class="rank' + rc + '">' + (i + 1) + '</td><td class="model">' + x.model + '</td><td class="rating">' + x.rating.toFixed(1) + '</td><td class="price">$' + x.input_price_1M.toFixed(4) + '</td><td class="price">$' + x.output_price_1M.toFixed(4) + '</td><td style="color:#a78bfa; font-weight:700">' + Math.round(getValueForPreset(x, preset)) + '</td></tr>';
+      var mName = x.model;
+      if (x.is_median) mName += ' <span style="font-size:0.7em; background:#f59e0b; color:#fff; padding:2px 4px; border-radius:4px; margin-left:6px">Median</span>';
+      tb += '<tr class="' + rw + '"><td class="rank' + rc + '">' + (i + 1) + '</td><td class="model">' + mName + '</td><td class="rating">' + x.rating.toFixed(1) + '</td><td class="price">$' + x.input_price_1M.toFixed(4) + '</td><td class="price">$' + x.output_price_1M.toFixed(4) + '</td><td style="color:#a78bfa; font-weight:700">' + Math.round(getValueForPreset(x, preset)) + '</td></tr>';
     });
     tb += '</tbody></table>';
     document.getElementById('tbl').innerHTML = tb;

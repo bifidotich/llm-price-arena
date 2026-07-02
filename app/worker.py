@@ -82,6 +82,14 @@ def build_snapshot(cfg: dict) -> dict:
         top_n_ratings = ratings[:top_n]
         median_rating = statistics.median(top_n_ratings) if top_n_ratings else 0.0
 
+        closest_model_id = None
+        min_diff = float('inf')
+        for or_id, info in matched_or.items():
+            diff = abs(info["rating"] - median_rating)
+            if diff < min_diff:
+                min_diff = diff
+                closest_model_id = or_id
+
         rows = []
         for or_id, info in matched_or.items():
             price = {"input": info["input"], "output": info["output"]}
@@ -94,6 +102,7 @@ def build_snapshot(cfg: dict) -> dict:
                 "blended_price_1M": round(
                     blended_price(price["input"], price["output"], sc["token_share"]), 4
                 ),
+                "is_median": or_id == closest_model_id,
                 "value": {},
             }
             for preset, w in sc["presets"].items():
