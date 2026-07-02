@@ -826,22 +826,39 @@ async function upd() {
         var intercept = (sumY - slope * sumX) / n;
         
         var svgPath = '';
+        var derivPath = '';
         var steps = 100;
         var started = false;
+        var startedD = false;
+        
+        var dMinPrice = minP + ((maxP - minP) / steps) * 1;
+        if (dMinPrice <= 0.0001) dMinPrice = 0.0001;
+        var maxD = Math.max(0.1, Math.abs(slope / dMinPrice));
+        
         for (var i = 0; i <= steps; i++) {
           var p = minP + ((maxP - minP) / steps) * i;
           if (p <= 0.0001) p = 0.0001;
-          var estR = slope * Math.log(p) + intercept;
-          var px = padL + ((p - minP) / (maxP - minP)) * innerW;
-          var py = padT + innerH - ((estR - minR) / (maxR - minR)) * innerH;
           
+          var px = padL + ((p - minP) / (maxP - minP)) * innerW;
+          
+          // Main curve
+          var estR = slope * Math.log(p) + intercept;
+          var py = padT + innerH - ((estR - minR) / (maxR - minR)) * innerH;
           if (!started) { svgPath += 'M ' + px + ' ' + py + ' '; started = true; }
           else { svgPath += 'L ' + px + ' ' + py + ' '; }
+          
+          // Derivative curve (scaled to bottom 40% of chart)
+          var d = Math.abs(slope / p);
+          var py_d = padT + innerH - (d / maxD) * (innerH * 0.4);
+          if (!startedD) { derivPath += 'M ' + px + ' ' + py_d + ' '; startedD = true; }
+          else { derivPath += 'L ' + px + ' ' + py_d + ' '; }
         }
         
         if (svgPath) {
           sc += '<svg style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:0; overflow:hidden;">' +
                 '<path d="' + svgPath + '" fill="none" stroke="rgba(99, 102, 241, 0.5)" stroke-width="2" stroke-dasharray="6,4" />' +
+                '<path d="' + derivPath + '" fill="none" stroke="rgba(16, 185, 129, 0.5)" stroke-width="2" />' +
+                '<text x="' + (padL + 20) + '" y="' + (padT + innerH - innerH * 0.4 - 10) + '" fill="rgba(16, 185, 129, 0.6)" font-size="11" font-weight="600">Marginal Value (Derivative)</text>' +
                 '</svg>';
         }
       }
