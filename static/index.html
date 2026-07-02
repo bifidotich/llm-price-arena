@@ -497,10 +497,6 @@
       <label>Category</label>
       <select id="catSel"></select>
     </div>
-    <div class="control-group">
-      <label>Value Profile</label>
-      <select id="presetSel"></select>
-    </div>
     <div class="stats">Models: <span id="modelCount">0</span> &middot; Updated: <span id="updatedAt">-</span></div>
   </div>
 
@@ -575,17 +571,7 @@ async function loadMeta() {
     catSel.appendChild(opt);
   });
   
-  const presetSel = document.getElementById('presetSel');
-  presetSel.innerHTML = '';
-  const presets = metaData.presets || ['quality','balanced','budget'];
-  presets.forEach(function(p) {
-    const opt = document.createElement('option');
-    opt.value = p;
-    const info = PRESETS[p] || { label: p };
-    opt.textContent = info.label + ' (β=' + (info.beta || '?') + ', γ=' + (info.gamma || '?') + ')';
-    if (p === (metaData.default_preset || 'balanced')) opt.selected = true;
-    presetSel.appendChild(opt);
-  });
+
   
   upd();
 }
@@ -634,7 +620,7 @@ window.setSort = function(type) {
 
 window.openModal = function(e) {
   if (e) e.stopPropagation();
-  const activePreset = document.getElementById('presetSel').value;
+  const activePreset = metaData.default_preset || 'balanced';
   const p = PRESETS[activePreset] || PRESETS.balanced;
   document.getElementById('modalBeta').textContent = 'β = ' + p.beta.toFixed(1);
   document.getElementById('modalGamma').textContent = 'γ = ' + p.gamma.toFixed(1);
@@ -656,10 +642,10 @@ let lastGoodData = null; // сохраняем последние свежие �
 
 function showDowntime(result) {
   var msg = result && result.updated_at
-    ? '<strong>⚠️ Сервис недоступен</strong><br><br>Последние данные от ' + new Date(result.updated_at).toLocaleString() + ' устарели (более 7 дней).<br>Backend-воркер не обновлял данные. Проверьте подключение к OpenRouter и HuggingFace.'
+    ? '<strong>⚠️ Сервис недоступен</strong><br><br>Последние данные от ' + new Date(result.updated_at).toLocaleString('ru-RU', { timeZone: 'UTC' }) + ' UTC устарели (более 7 дней).<br>Backend-воркер не обновлял данные. Проверьте подключение к OpenRouter и HuggingFace.'
     : '<strong>⚠️ Сервис недоступен</strong><br><br>Backend не отвечает. Проверьте, запущен ли сервер.';
   document.getElementById('subtitle').textContent = '⚠️ Сервис недоступен — данные устарели';
-    document.getElementById('updatedAt').textContent = result && result.updated_at ? new Date(result.updated_at).toLocaleString() + ' (УСТАРЕЛО)' : '-';
+    document.getElementById('updatedAt').textContent = result && result.updated_at ? new Date(result.updated_at).toLocaleString('ru-RU', { timeZone: 'UTC' }) + ' UTC (УСТАРЕЛО)' : '-';
   document.getElementById('modelCount').textContent = '0';
   document.getElementById('sChart').innerHTML = '<div class="error-box">' + msg + '</div>';
   document.getElementById('bChart').innerHTML = '<div class="error-box">' + msg + '</div>';
@@ -684,7 +670,7 @@ async function upd() {
   showLoading();
   try {
     var c = document.getElementById('catSel').value;
-    var preset = document.getElementById('presetSel').value;
+    var preset = metaData.default_preset || 'balanced';
     
     if (!c || !preset) return;
     
@@ -710,7 +696,7 @@ async function upd() {
     lastGoodData = result;
     
     document.getElementById('subtitle').textContent = 'LM Arena — OpenRouter — ' + result.count + ' models';
-    document.getElementById('updatedAt').textContent = result.updated_at ? new Date(result.updated_at).toLocaleString() : '-';
+    document.getElementById('updatedAt').textContent = result.updated_at ? new Date(result.updated_at).toLocaleString('ru-RU', { timeZone: 'UTC' }) + ' UTC' : '-';
     
     if (!m || !m.length) {
       document.getElementById('sChart').innerHTML = '<div class="error-box">No data</div>';
@@ -867,7 +853,7 @@ window.hideTt = function() {
 };
 
 document.getElementById('catSel').addEventListener('change', upd);
-document.getElementById('presetSel').addEventListener('change', upd);
+
 
 document.getElementById('ptPrompt').addEventListener('click', function() {
   pt = 'input';
