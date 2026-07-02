@@ -848,46 +848,49 @@ async function upd() {
     
     if (hull.length > 1) {
       var svgPath = '';
-      var derivPath = '';
+      var firstPx, lastPx;
       
       hull.forEach(function(pt, i) {
         var px = padL + ((pt.p - minP) / (maxP - minP)) * innerW;
         var py = padT + innerH - ((pt.r - minR) / (maxR - minR)) * innerH;
-        if (i === 0) svgPath += 'M ' + px + ' ' + py + ' ';
-        else svgPath += 'L ' + px + ' ' + py + ' ';
+        if (i === 0) { svgPath += 'M ' + px + ' ' + py + ' '; firstPx = px; }
+        else { svgPath += 'L ' + px + ' ' + py + ' '; }
+        lastPx = px;
       });
       
+      var fillPath = svgPath + ' L ' + lastPx + ' ' + (padT + innerH) + ' L ' + firstPx + ' ' + (padT + innerH) + ' Z';
+      
       var derivs = [];
-      var maxD = 0;
       for (var i = 1; i < hull.length; i++) {
         var dp = hull[i].p - hull[i-1].p;
         var dr = hull[i].r - hull[i-1].r;
         var d = dr / dp;
         derivs.push(d);
-        if (d > maxD) maxD = d;
       }
-      if (maxD === 0) maxD = 1;
       
-      for (var i = 1; i < hull.length; i++) {
-        var p1 = hull[i-1].p;
-        var p2 = hull[i].p;
-        var d = derivs[i-1];
-        
-        var px1 = padL + ((p1 - minP) / (maxP - minP)) * innerW;
-        var px2 = padL + ((p2 - minP) / (maxP - minP)) * innerW;
-        var py_d = padT + innerH - (d / maxD) * (innerH * 0.4);
-        
-        if (i === 1) {
-          derivPath += 'M ' + px1 + ' ' + py_d + ' ';
-        } else {
-          derivPath += 'L ' + px1 + ' ' + py_d + ' ';
-        }
-        derivPath += 'L ' + px2 + ' ' + py_d + ' ';
+      var d2_arr = [];
+      var maxD2 = 0;
+      for (var i = 1; i < hull.length - 1; i++) {
+        var d1 = derivs[i-1];
+        var d2 = derivs[i];
+        var dp_avg = (hull[i+1].p - hull[i-1].p) / 2;
+        var deriv2 = Math.abs((d2 - d1) / dp_avg);
+        d2_arr.push({ p: hull[i].p, val: deriv2 });
+        if (deriv2 > maxD2) maxD2 = deriv2;
       }
+      if (maxD2 === 0) maxD2 = 1;
+      
+      var deriv2Path = '';
+      d2_arr.forEach(function(d2pt, idx) {
+        var px = padL + ((d2pt.p - minP) / (maxP - minP)) * innerW;
+        var py_d2 = padT + innerH - (d2pt.val / maxD2) * (innerH * 0.4);
+        if (idx === 0) deriv2Path += 'M ' + px + ' ' + py_d2 + ' ';
+        else deriv2Path += 'L ' + px + ' ' + py_d2 + ' ';
+      });
       
       sc += '<svg style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:0; overflow:hidden;">' +
-            '<path d="' + svgPath + '" fill="none" stroke="rgba(99, 102, 241, 0.5)" stroke-width="2" stroke-dasharray="6,4" />' +
-            '<path d="' + derivPath + '" fill="none" stroke="rgba(16, 185, 129, 0.5)" stroke-width="2" />' +
+            '<path d="' + fillPath + '" fill="rgba(99, 102, 241, 0.1)" stroke="none" />' +
+            (deriv2Path ? '<path d="' + deriv2Path + '" fill="none" stroke="rgba(16, 185, 129, 0.6)" stroke-width="2" stroke-dasharray="4,4" />' : '') +
             '</svg>';
     }
 
