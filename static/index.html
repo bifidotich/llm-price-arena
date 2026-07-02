@@ -231,10 +231,8 @@
        background: rgba(15, 17, 23, 0.9);
        padding: 1px 5px;
        border-radius: 4px;
+       border-radius: 4px;
        border: 1px solid rgba(45, 49, 66, 0.4);
-       max-width: 65px;
-       overflow: hidden;
-       text-overflow: ellipsis;
      }
      .scatter-median-line {
        position: absolute;
@@ -279,12 +277,10 @@
        gap: 12px;
      }
      .bar-label-left {
-       width: 200px;
+       width: 250px;
        font-size: .82em;
        color: #e2e8f0;
-       text-overflow: ellipsis;
-       overflow: hidden;
-       white-space: nowrap;
+       word-wrap: break-word;
        font-weight: 600;
        text-align: left;
        flex-shrink: 0;
@@ -456,7 +452,7 @@
        .bar-row { gap: 6px; }
        .bar-track { height: 20px; }
        .bar-val { font-size: 0.65em; }
-       .scatter-dot-label { max-width: 60px; font-size: 0.58em; }
+       .scatter-dot-label { font-size: 0.58em; }
        .scatter-tooltip { font-size: 0.7em; max-width: 150px; }
        .table-card { padding: 8px; }
        table { font-size: 0.75em; }
@@ -474,7 +470,7 @@
        .card h2 { font-size: 0.85em; }
        .chart-container { height: 220px; }
        #sChart { height: 320px; }
-       .bar-label-left { width: 80px; font-size: 0.65em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+       .bar-label-left { width: 120px; font-size: 0.65em; word-wrap: break-word; }
        .bar-row { gap: 4px; }
        .bar-track { height: 16px; }
        .bar-val { font-size: 0.58em; right: 4px; }
@@ -800,9 +796,8 @@ async function upd() {
         : 'left:' + (x - 92) + 'px; top:' + (y - 6) + 'px; text-align: right;';
 
       var safeModel = item.model.replace(/'/g, '').replace(/"/g, '');
-      var shortModel = item.model.includes('/') ? item.model.split('/').slice(1).join('/') : item.model;
       sc += '<div class="scatter-dot" style="left:' + x + 'px; top:' + y + 'px; --c:' + col + '; background:' + col + '" onmouseover="showTt(event,' + "'" + safeModel + "'" + ',' + item.rating + ',' + graphPrice + ',' + getValueForPreset(item, preset) + ')" onmouseout="hideTt()"></div>';
-      sc += '<div class="scatter-dot-label" style="' + labelStyle + '">' + shortModel + '</div>';
+      sc += '<div class="scatter-dot-label" style="' + labelStyle + '">' + item.model + '</div>';
     });
 
     // Trend line (Theil-Sen median-based regression: Rating = a * ln(Price) + b)
@@ -871,7 +866,6 @@ async function upd() {
           sc += '<svg style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:0; overflow:hidden;">' +
                 '<path d="' + svgPath + '" fill="none" stroke="rgba(99, 102, 241, 0.5)" stroke-width="2" stroke-dasharray="6,4" />' +
                 '<path d="' + derivPath + '" fill="none" stroke="rgba(16, 185, 129, 0.5)" stroke-width="2" />' +
-                '<text x="' + (padL + 20) + '" y="' + (padT + innerH - innerH * 0.4 - 10) + '" fill="rgba(16, 185, 129, 0.6)" font-size="11" font-weight="600">Marginal Value (Derivative)</text>' +
                 '</svg>';
         }
       }
