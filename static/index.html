@@ -668,17 +668,15 @@ const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 let lastGoodData = null; // сохраняем последние свежие данные
 
 function showDowntime(result) {
-  var msg = result && result.updated_at
-    ? '<strong>⚠️ Сервис недоступен</strong><br><br>Последние данные от ' + new Date(result.updated_at).toLocaleString('ru-RU', { timeZone: 'UTC' }) + ' UTC устарели (более 7 дней).<br>Backend-воркер не обновлял данные. Проверьте подключение к OpenRouter и HuggingFace.'
-    : '<strong>⚠️ Сервис недоступен</strong><br><br>Backend не отвечает. Проверьте, запущен ли сервер.';
-  document.getElementById('subtitle').textContent = '⚠️ Сервис недоступен — данные устарели';
-    document.getElementById('updatedAt').textContent = result && result.updated_at ? new Date(result.updated_at).toLocaleString('ru-RU', { timeZone: 'UTC' }) + ' UTC (УСТАРЕЛО)' : '-';
+  var msg = '<strong>⚠️ Service Unavailable</strong>';
+  document.getElementById('subtitle').textContent = '⚠️ Service Unavailable';
+  document.getElementById('updatedAt').textContent = result && result.updated_at ? new Date(result.updated_at).toLocaleString('ru-RU', { timeZone: 'UTC' }) + ' UTC (OUTDATED)' : '-';
   document.getElementById('modelCount').textContent = '0';
   document.getElementById('sChart').innerHTML = '<div class="error-box">' + msg + '</div>';
   document.getElementById('bChart').innerHTML = '<div class="error-box">' + msg + '</div>';
   document.getElementById('tbl').innerHTML = '';
-  document.getElementById('bTitle').textContent = '⚠️ Сервис недоступен';
-  document.getElementById('sTitle').textContent = '⚠️ Сервис недоступен';
+  document.getElementById('bTitle').textContent = '⚠️ Service Unavailable';
+  document.getElementById('sTitle').textContent = '⚠️ Service Unavailable';
 }
 
 function showLoading() {
@@ -807,12 +805,7 @@ async function upd() {
       sc += '<div class="scatter-dot-label" style="' + labelStyle + '">' + shortModel + '</div>';
     });
 
-    var medianModel = sc_m.find(function(x) { return x.is_median; });
-    if (medianModel) {
-      var medianY = padT + innerH - ((medianModel.rating - minR) / (maxR - minR)) * innerH;
-      sc += '<div class="scatter-gridLine h" style="top:' + medianY + 'px; left:' + padL + 'px; right:' + padR + 'px; border-top: 2px dashed rgba(245, 158, 11, 0.5); background: transparent;"></div>';
-      sc += '<div class="scatter-label" style="top:' + (medianY - 18) + 'px; right:' + (padR + 5) + 'px; color:#f59e0b; width:auto; font-weight:600;">Median Rating</div>';
-    }
+
 
     document.getElementById('sChart').innerHTML = sc;
 
@@ -855,7 +848,7 @@ async function upd() {
       var inColor = 'linear-gradient(90deg,#10b981,#34d399)';
       var outColor = 'linear-gradient(90deg,#e11d48,#fb7185)';
 
-      var bName = x.is_median ? '<span style="color:#f59e0b" title="Median Model">★</span> ' + x.model : x.model;
+      var bName = x.model;
       bc += '<div class="bar-row">' +
         '<div class="bar-label-left" title="' + x.model + '">' + bName + '</div>' +
         '<div class="bar-track"><div class="bar-fill" style="width:' + rPct + '%; background:' + rColor + '"></div><div class="bar-val">' + x.rating.toFixed(1) + '</div></div>' +
@@ -873,10 +866,7 @@ async function upd() {
       var rw = i === 0 ? ' rank-1-row' : i === 1 ? ' rank-2-row' : i === 2 ? ' rank-3-row' : '';
       var mName = x.model;
       var rowStyle = '';
-      if (x.is_median) {
-        mName += ' <span style="font-size:0.7em; background:#f59e0b; color:#fff; padding:2px 4px; border-radius:4px; margin-left:6px">Median</span>';
-        rowStyle = 'background: rgba(245, 158, 11, 0.15);';
-      }
+
       var cDate = x.created ? new Date(x.created * 1000).toLocaleDateString('ru-RU') : '-';
       tb += '<tr class="' + rw + '" style="' + rowStyle + '"><td class="rank' + rc + '">' + (i + 1) + '</td><td class="model">' + mName + '</td><td class="rating">' + x.rating.toFixed(1) + '</td><td class="price">$' + x.input_price_1M.toFixed(4) + '</td><td class="price">$' + x.output_price_1M.toFixed(4) + '</td><td style="color:#94a3b8">' + cDate + '</td><td style="color:#a78bfa; font-weight:700">' + Math.round(getValueForPreset(x, preset)) + '</td></tr>';
     });
