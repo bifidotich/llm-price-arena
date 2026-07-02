@@ -823,70 +823,59 @@ async function upd() {
       }
     });
     
-    var hull = [];
-    if (frontier.length > 0) {
-      hull.push(frontier[0]);
-      if (frontier.length > 1) {
-        hull.push(frontier[1]);
-        for (var i = 2; i < frontier.length; i++) {
-          var pCurr = frontier[i];
-          while (hull.length >= 2) {
-            var pLast = hull[hull.length - 1];
-            var pPrev = hull[hull.length - 2];
-            var slope1 = (pLast.r - pPrev.r) / (pLast.p - pPrev.p);
-            var slope2 = (pCurr.r - pLast.r) / (pCurr.p - pLast.p);
-            if (slope2 >= slope1) {
-              hull.pop();
-            } else {
-              break;
-            }
-          }
-          hull.push(pCurr);
-        }
-      }
-    }
-    
-    if (hull.length > 1) {
-      var svgPath = '';
-      var firstPx, lastPx;
-      
-      hull.forEach(function(pt, i) {
-        var px = padL + ((pt.p - minP) / (maxP - minP)) * innerW;
-        var py = padT + innerH - ((pt.r - minR) / (maxR - minR)) * innerH;
-        if (i === 0) { svgPath += 'M ' + px + ' ' + py + ' '; firstPx = px; }
-        else { svgPath += 'L ' + px + ' ' + py + ' '; }
-        lastPx = px;
+    if (frontier.length > 1) {
+      var frontierPts = frontier.map(function(pt) {
+        return {
+          p: pt.p,
+          r: pt.r,
+          px: padL + ((pt.p - minP) / (maxP - minP)) * innerW,
+          py: padT + innerH - ((pt.r - minR) / (maxR - minR)) * innerH
+        };
       });
       
-      var fillPath = svgPath + ' L ' + lastPx + ' ' + (padT + innerH) + ' L ' + firstPx + ' ' + (padT + innerH) + ' Z';
+      var svgPath = '';
+      svgPath += 'M ' + frontierPts[0].px + ' ' + frontierPts[0].py;
+      for (var i = 0; i < frontierPts.length - 1; i++) {
+        var p0 = frontierPts[i];
+        var p1 = frontierPts[i+1];
+        var dx = (p1.px - p0.px) / 2;
+        svgPath += ' C ' + (p0.px + dx) + ' ' + p0.py + ', ' + (p1.px - dx) + ' ' + p1.py + ', ' + p1.px + ' ' + p1.py;
+      }
+      
+      var fillPath = svgPath + ' L ' + frontierPts[frontierPts.length-1].px + ' ' + (padT + innerH) + ' L ' + frontierPts[0].px + ' ' + (padT + innerH) + ' Z';
       
       var derivs = [];
-      for (var i = 1; i < hull.length; i++) {
-        var dp = hull[i].p - hull[i-1].p;
-        var dr = hull[i].r - hull[i-1].r;
-        var d = dr / dp;
-        derivs.push(d);
+      for (var i = 0; i < frontierPts.length - 1; i++) {
+        var dp = frontierPts[i+1].p - frontierPts[i].p;
+        var dr = frontierPts[i+1].r - frontierPts[i].r;
+        derivs.push(dr / dp);
       }
       
       var d2_arr = [];
       var maxD2 = 0;
-      for (var i = 1; i < hull.length - 1; i++) {
+      for (var i = 1; i < derivs.length; i++) {
         var d1 = derivs[i-1];
         var d2 = derivs[i];
-        var dp_avg = (hull[i+1].p - hull[i-1].p) / 2;
+        var dp_avg = (frontierPts[i+1].p - frontierPts[i-1].p) / 2;
         var deriv2 = Math.abs((d2 - d1) / dp_avg);
-        d2_arr.push({ p: hull[i].p, val: deriv2 });
+        d2_arr.push({ px: frontierPts[i].px, val: deriv2 });
         if (deriv2 > maxD2) maxD2 = deriv2;
       }
       if (maxD2 === 0) maxD2 = 1;
       
       var deriv2Path = '';
-      d2_arr.forEach(function(d2pt, idx) {
-        var px = padL + ((d2pt.p - minP) / (maxP - minP)) * innerW;
-        var py_d2 = padT + innerH - (d2pt.val / maxD2) * (innerH * 0.4);
-        if (idx === 0) deriv2Path += 'M ' + px + ' ' + py_d2 + ' ';
-        else deriv2Path += 'L ' + px + ' ' + py_d2 + ' ';
-      });
+      if (d2_arr.length > 0) {
+        d2_arr.forEach(function(d2pt) {
+          d2pt.py = padT + innerH - (d2pt.val / maxD2) * (innerH * 0.4);
+        });
+        deriv2Path += 'M ' + d2_arr[0].px + ' ' + d2_arr[0].py;
+        for (var i = 0; i < d2_arr.length - 1; i++) {
+          var p0 = d2_arr[i];
+          var p1 = d2_arr[i+1];
+          var dx = (p1.px - p0.px) / 2;
+          deriv2Path += ' C ' + (p0.px + dx) + ' ' + p0.py + ', ' + (p1.px - dx) + ' ' + p1.py + ', ' + p1.px + ' ' + p1.py;
+        }
+      }
       
       sc += '<svg style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:0; overflow:hidden;">' +
             '<path d="' + fillPath + '" fill="rgba(99, 102, 241, 0.1)" stroke="none" />' +
