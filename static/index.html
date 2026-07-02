@@ -503,18 +503,6 @@
       <label>Category</label>
       <select id="catSel"></select>
     </div>
-    <div class="control-group">
-      <label>Top Rating</label>
-      <select id="topSel">
-        <option value="0">All</option>
-        <option value="5">Top 5</option>
-        <option value="10">Top 10</option>
-        <option value="15">Top 15</option>
-        <option value="20">Top 20</option>
-        <option value="30">Top 30</option>
-        <option value="50">Top 50</option>
-      </select>
-    </div>
     <div class="stats">Models: <span id="modelCount">0</span> &middot; Updated: <span id="updatedAt">-</span></div>
   </div>
 
@@ -527,11 +515,25 @@
     <div class="card">
       <div class="card-header-row">
         <h2 id="sTitle" style="margin-bottom: 0;">Price vs Rating</h2>
-        <div class="control-group" style="flex-direction: row; align-items: center; gap: 8px;">
-          <label style="margin-bottom: 0;">Price Axis:</label>
-          <div class="toggle-group" style="height: 32px; padding: 2px;">
-            <button id="ptPrompt" class="toggle-btn active" style="padding: 4px 10px; font-size: 0.8em;">Input</button>
-            <button id="ptCompletion" class="toggle-btn" style="padding: 4px 10px; font-size: 0.8em;">Output</button>
+        <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center;">
+          <div class="control-group" style="flex-direction: row; align-items: center; gap: 8px;">
+            <label style="margin-bottom: 0;">Top Rating:</label>
+            <select id="topSel" style="min-width: auto; padding: 4px 8px; font-size: 0.8em;">
+              <option value="0">All</option>
+              <option value="5">Top 5</option>
+              <option value="10">Top 10</option>
+              <option value="15">Top 15</option>
+              <option value="20">Top 20</option>
+              <option value="30">Top 30</option>
+              <option value="50">Top 50</option>
+            </select>
+          </div>
+          <div class="control-group" style="flex-direction: row; align-items: center; gap: 8px;">
+            <label style="margin-bottom: 0;">Price Axis:</label>
+            <div class="toggle-group" style="height: 32px; padding: 2px;">
+              <button id="ptPrompt" class="toggle-btn active" style="padding: 4px 10px; font-size: 0.8em;">Input</button>
+              <button id="ptCompletion" class="toggle-btn" style="padding: 4px 10px; font-size: 0.8em;">Output</button>
+            </div>
           </div>
         </div>
       </div>
