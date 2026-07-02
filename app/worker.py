@@ -113,6 +113,7 @@ def build_snapshot(cfg: dict) -> dict:
                     blended_price(price["input"], price["output"], sc["token_share"]), 4
                 ),
                 "is_median": or_id == closest_model_id,
+                "created": info.get("created", 0),
                 "value": {},
             }
             for preset, w in sc["presets"].items():

@@ -621,6 +621,8 @@ function sortModels(arr, sortKey, preset) {
   else if (sortKey === 'input-desc') a.sort(function(a,b){ return b.input_price_1M - a.input_price_1M; });
   else if (sortKey === 'output-asc') a.sort(function(a,b){ return a.output_price_1M - b.output_price_1M; });
   else if (sortKey === 'output-desc') a.sort(function(a,b){ return b.output_price_1M - a.output_price_1M; });
+  else if (sortKey === 'date-asc') a.sort(function(a,b){ return (a.created || 0) - (b.created || 0); });
+  else if (sortKey === 'date-desc') a.sort(function(a,b){ return (b.created || 0) - (a.created || 0); });
   return a;
 }
 
@@ -635,6 +637,8 @@ window.setSort = function(type) {
     currentSort = (currentSort === 'input-asc') ? 'input-desc' : 'input-asc';
   } else if (type === 'output') {
     currentSort = (currentSort === 'output-asc') ? 'output-desc' : 'output-asc';
+  } else if (type === 'date') {
+    currentSort = (currentSort === 'date-desc') ? 'date-asc' : 'date-desc';
   }
   upd();
 };
@@ -815,8 +819,9 @@ async function upd() {
     var minRBar = Math.min.apply(null, m.map(function(x) { return x.rating; })) - 20;
     if (maxRBar === minRBar) minRBar = maxRBar - 100;
 
-    var maxVBar = Math.max.apply(null, scores);
-    var minVBar = Math.min.apply(null, scores) - 10;
+    var allScores = m.map(function(x) { return getValueForPreset(x, preset); });
+    var maxVBar = Math.max.apply(null, allScores);
+    var minVBar = Math.min.apply(null, allScores) - 10;
     if (minVBar < 0) minVBar = 0;
     if (maxVBar === minVBar) minVBar = maxVBar - 10;
 
@@ -860,7 +865,7 @@ async function upd() {
     document.getElementById('bChart').innerHTML = bc;
 
     // Table
-    var tb = '<table><thead><tr><th onclick="setSort(\'rating\')">#</th><th onclick="setSort(\'name\')">Model</th><th onclick="setSort(\'rating\')">Rating</th><th onclick="setSort(\'input\')">Input $/1M</th><th onclick="setSort(\'output\')">Output $/1M</th><th onclick="setSort(\'value\')">Value <span class="info-icon" onclick="openModal(event)">ⓘ</span></th></tr></thead><tbody>';
+    var tb = '<table><thead><tr><th onclick="setSort(\'rating\')">#</th><th onclick="setSort(\'name\')">Model</th><th onclick="setSort(\'rating\')">Rating</th><th onclick="setSort(\'input\')">Input $/1M</th><th onclick="setSort(\'output\')">Output $/1M</th><th onclick="setSort(\'date\')">Release Date</th><th onclick="setSort(\'value\')">Value <span class="info-icon" onclick="openModal(event)">ⓘ</span></th></tr></thead><tbody>';
     m.forEach(function(x, i) {
       var rc = i === 0 ? ' rank-1' : i === 1 ? ' rank-2' : i === 2 ? ' rank-3' : '';
       var rw = i === 0 ? ' rank-1-row' : i === 1 ? ' rank-2-row' : i === 2 ? ' rank-3-row' : '';
@@ -870,7 +875,8 @@ async function upd() {
         mName += ' <span style="font-size:0.7em; background:#f59e0b; color:#fff; padding:2px 4px; border-radius:4px; margin-left:6px">Median</span>';
         rowStyle = 'background: rgba(245, 158, 11, 0.15);';
       }
-      tb += '<tr class="' + rw + '" style="' + rowStyle + '"><td class="rank' + rc + '">' + (i + 1) + '</td><td class="model">' + mName + '</td><td class="rating">' + x.rating.toFixed(1) + '</td><td class="price">$' + x.input_price_1M.toFixed(4) + '</td><td class="price">$' + x.output_price_1M.toFixed(4) + '</td><td style="color:#a78bfa; font-weight:700">' + Math.round(getValueForPreset(x, preset)) + '</td></tr>';
+      var cDate = x.created ? new Date(x.created * 1000).toLocaleDateString('ru-RU') : '-';
+      tb += '<tr class="' + rw + '" style="' + rowStyle + '"><td class="rank' + rc + '">' + (i + 1) + '</td><td class="model">' + mName + '</td><td class="rating">' + x.rating.toFixed(1) + '</td><td class="price">$' + x.input_price_1M.toFixed(4) + '</td><td class="price">$' + x.output_price_1M.toFixed(4) + '</td><td style="color:#94a3b8">' + cDate + '</td><td style="color:#a78bfa; font-weight:700">' + Math.round(getValueForPreset(x, preset)) + '</td></tr>';
     });
     tb += '</tbody></table>';
     document.getElementById('tbl').innerHTML = tb;
