@@ -232,14 +232,20 @@
        padding: 1px 5px;
        border-radius: 4px;
        border: 1px solid rgba(45, 49, 66, 0.4);
-       max-width: 85px;
+       max-width: 65px;
        overflow: hidden;
        text-overflow: ellipsis;
      }
+     .scatter-median-line {
+       position: absolute;
+       border: 1px dashed #6366f1;
+       z-index: 0;
+       opacity: 0.5;
+     }
      .scatter-dot {
        position: absolute;
-       width: 10px;
-       height: 10px;
+       width: 14px;
+       height: 14px;
        border-radius: 50%;
        transform: translate(-50%, -50%);
        cursor: pointer;
@@ -790,9 +796,18 @@ async function upd() {
         : 'left:' + (x - 92) + 'px; top:' + (y - 6) + 'px; text-align: right;';
 
       var safeModel = item.model.replace(/'/g, '').replace(/"/g, '');
+      var shortModel = item.model.includes('/') ? item.model.split('/').slice(1).join('/') : item.model;
       sc += '<div class="scatter-dot" style="left:' + x + 'px; top:' + y + 'px; --c:' + col + '; background:' + col + '" onmouseover="showTt(event,' + "'" + safeModel + "'" + ',' + item.rating + ',' + graphPrice + ',' + getValueForPreset(item, preset) + ')" onmouseout="hideTt()"></div>';
-      sc += '<div class="scatter-dot-label" style="' + labelStyle + '">' + item.model + '</div>';
+      sc += '<div class="scatter-dot-label" style="' + labelStyle + '">' + shortModel + '</div>';
     });
+
+    var medianModel = sc_m.find(function(x) { return x.is_median; });
+    if (medianModel) {
+      var medianY = padT + innerH - ((medianModel.rating - minR) / (maxR - minR)) * innerH;
+      sc += '<div class="scatter-gridLine h" style="top:' + medianY + 'px; left:' + padL + 'px; right:' + padR + 'px; border-top: 2px dashed rgba(245, 158, 11, 0.5); background: transparent;"></div>';
+      sc += '<div class="scatter-label" style="top:' + (medianY - 18) + 'px; right:' + (padR + 5) + 'px; color:#f59e0b; width:auto; font-weight:600;">Median Rating</div>';
+    }
+
     document.getElementById('sChart').innerHTML = sc;
 
     // Bar chart
