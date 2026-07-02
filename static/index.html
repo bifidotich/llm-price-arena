@@ -805,7 +805,7 @@ async function upd() {
       sc += '<div class="scatter-dot-label" style="' + labelStyle + '">' + shortModel + '</div>';
     });
 
-    // Trend line (Logarithmic regression: Rating = a * ln(Price) + b)
+    // Trend line (Theil-Sen median-based regression: Rating = a * ln(Price) + b)
     var regData = [];
     sc_m.forEach(function(item) {
       var price = pt === 'input' ? item.input_price_1M : item.output_price_1M;
@@ -815,15 +815,28 @@ async function upd() {
     });
     
     if (regData.length > 1) {
-      var sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
       var n = regData.length;
-      regData.forEach(function(pt) {
-        sumX += pt.x; sumY += pt.y; sumXY += pt.x * pt.y; sumXX += pt.x * pt.x;
-      });
-      var denom = n * sumXX - sumX * sumX;
-      if (Math.abs(denom) > 1e-9) {
-        var slope = (n * sumXY - sumX * sumY) / denom;
-        var intercept = (sumY - slope * sumX) / n;
+      var slopes = [];
+      for (var i = 0; i < n; i++) {
+        for (var j = i + 1; j < n; j++) {
+          var dx = regData[j].x - regData[i].x;
+          if (Math.abs(dx) > 1e-9) {
+            slopes.push((regData[j].y - regData[i].y) / dx);
+          }
+        }
+      }
+      
+      if (slopes.length > 0) {
+        slopes.sort(function(a, b) { return a - b; });
+        var slope = slopes.length % 2 === 0 
+          ? (slopes[slopes.length / 2 - 1] + slopes[slopes.length / 2]) / 2 
+          : slopes[Math.floor(slopes.length / 2)];
+          
+        var intercepts = regData.map(function(pt) { return pt.y - slope * pt.x; });
+        intercepts.sort(function(a, b) { return a - b; });
+        var intercept = intercepts.length % 2 === 0
+          ? (intercepts[intercepts.length / 2 - 1] + intercepts[intercepts.length / 2]) / 2
+          : intercepts[Math.floor(intercepts.length / 2)];
         
         var svgPath = '';
         var derivPath = '';
