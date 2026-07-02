@@ -497,6 +497,18 @@
       <label>Category</label>
       <select id="catSel"></select>
     </div>
+    <div class="control-group">
+      <label>Top Rating</label>
+      <select id="topSel">
+        <option value="0">All</option>
+        <option value="5">Top 5</option>
+        <option value="10">Top 10</option>
+        <option value="15">Top 15</option>
+        <option value="20">Top 20</option>
+        <option value="30">Top 30</option>
+        <option value="50">Top 50</option>
+      </select>
+    </div>
     <div class="stats">Models: <span id="modelCount">0</span> &middot; Updated: <span id="updatedAt">-</span></div>
   </div>
 
@@ -709,6 +721,13 @@ async function upd() {
       return;
     }
     
+    // Limit to Top N by rating if selected
+    var topVal = parseInt(document.getElementById('topSel').value, 10);
+    if (topVal > 0) {
+      m.sort(function(a, b) { return b.rating - a.rating; });
+      m = m.slice(0, topVal);
+    }
+    
     // Sort by current sort key (after fetching - server sorts by value desc by default)
     m = sortModels(m, currentSort, preset);
     
@@ -863,7 +882,7 @@ window.hideTt = function() {
 };
 
 document.getElementById('catSel').addEventListener('change', upd);
-
+document.getElementById('topSel').addEventListener('change', upd);
 
 document.getElementById('ptPrompt').addEventListener('click', function() {
   pt = 'input';
