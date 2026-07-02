@@ -849,7 +849,8 @@ async function upd() {
       var outColor = 'linear-gradient(90deg,#e11d48,#fb7185)';
 
       var bName = x.model;
-      bc += '<div class="bar-row">' +
+      var bRowStyle = x.is_median ? ' style="background: rgba(245, 158, 11, 0.15); border-radius: 6px; padding: 4px 8px; margin: -4px -8px 6px -8px;"' : '';
+      bc += '<div class="bar-row"' + bRowStyle + '>' +
         '<div class="bar-label-left" title="' + x.model + '">' + bName + '</div>' +
         '<div class="bar-track"><div class="bar-fill" style="width:' + rPct + '%; background:' + rColor + '"></div><div class="bar-val">' + x.rating.toFixed(1) + '</div></div>' +
         '<div class="bar-track"><div class="bar-fill" style="width:' + inPct + '%; background:' + inColor + '"></div><div class="bar-val">$' + x.input_price_1M.toFixed(2) + '</div></div>' +
@@ -866,6 +867,9 @@ async function upd() {
       var rw = i === 0 ? ' rank-1-row' : i === 1 ? ' rank-2-row' : i === 2 ? ' rank-3-row' : '';
       var mName = x.model;
       var rowStyle = '';
+      if (x.is_median) {
+        rowStyle = 'background: rgba(245, 158, 11, 0.15);';
+      }
 
       var cDate = x.created ? new Date(x.created * 1000).toLocaleDateString('ru-RU') : '-';
       tb += '<tr class="' + rw + '" style="' + rowStyle + '"><td class="rank' + rc + '">' + (i + 1) + '</td><td class="model">' + mName + '</td><td class="rating">' + x.rating.toFixed(1) + '</td><td class="price">$' + x.input_price_1M.toFixed(4) + '</td><td class="price">$' + x.output_price_1M.toFixed(4) + '</td><td style="color:#94a3b8">' + cDate + '</td><td style="color:#a78bfa; font-weight:700">' + Math.round(getValueForPreset(x, preset)) + '</td></tr>';
