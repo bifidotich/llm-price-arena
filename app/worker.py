@@ -53,6 +53,10 @@ def build_snapshot(cfg: dict) -> dict:
     categories: dict[str, list[dict]] = {}
     all_unmatched: set[str] = set()
 
+    import statistics
+    
+    top_n = sc.get("top_n_for_median", 10)
+
     # 2. По каждой категории: рейтинги → матчинг → value
     for tab, spec in lm_cfg["categories"].items():
         try:
@@ -68,6 +72,15 @@ def build_snapshot(cfg: dict) -> dict:
         # Автоматический матчинг (передаём raw OpenRouter модели, не prices dict)
         matched_or, unmatched_lm = auto_match_all(lm_models, raw_models)
         all_unmatched |= unmatched_lm
+
+        if not matched_or:
+            categories[tab] = []
+            continue
+            
+        # Считаем медиану Топ-N по рейтингу
+        ratings = sorted([info["rating"] for info in matched_or.values()], reverse=True)
+        top_n_ratings = ratings[:top_n]
+        median_rating = statistics.median(top_n_ratings) if top_n_ratings else 0.0
 
         rows = []
         for or_id, info in matched_or.items():
@@ -86,8 +99,8 @@ def build_snapshot(cfg: dict) -> dict:
             for preset, w in sc["presets"].items():
                 v = value_score(
                     info["rating"], price["input"], price["output"],
-                    anchor=sc["anchor"], token_share=sc["token_share"],
-                    beta=w["beta"], gamma=w["gamma"],
+                    median_rating=median_rating, token_share=sc["token_share"],
+                    k=w["k"], gamma=w["gamma"],
                 )
                 row["value"][preset] = round(v, 2) if v is not None else None
             rows.append(row)
