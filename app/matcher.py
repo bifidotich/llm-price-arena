@@ -126,7 +126,7 @@ def index_openrouter(or_models: list[dict]) -> tuple[dict[str, dict], dict[str, 
 
         # Основной индекс по нормализованному имени (без организации)
         if n and or_id not in by_norm:
-            by_norm[n] = {"id": or_id, "org": org, "price": price_data, "name_orig": name_part}
+            by_norm[n] = {"id": or_id, "org": org, "price": price_data, "name_orig": name_part, "created": m.get("created", 0)}
 
         # HuggingFace ID индекс
         hf = m.get("hugging_face_id")
@@ -252,6 +252,7 @@ def auto_match_all(
                     "output": price["output"],
                     "rating": lm["rating"],
                     "rank": lm["rank"],
+                    "created": or_by_norm[norm_key].get("created", 0),
                 }
         else:
             unmatched.add(lm_name)

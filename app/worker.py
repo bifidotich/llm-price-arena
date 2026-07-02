@@ -77,10 +77,20 @@ def build_snapshot(cfg: dict) -> dict:
             categories[tab] = []
             continue
             
-        # Считаем медиану Топ-N по рейтингу
-        ratings = sorted([info["rating"] for info in matched_or.values()], reverse=True)
-        top_n_ratings = ratings[:top_n]
-        median_rating = statistics.median(top_n_ratings) if top_n_ratings else 0.0
+        # Считаем медиану от моделей за последние 6 месяцев (или берем N самых новых)
+        now = time.time()
+        HALF_YEAR = 180 * 24 * 3600
+        
+        all_sorted_by_date = sorted(matched_or.values(), key=lambda x: x.get("created", 0), reverse=True)
+        recent_models = [info for info in all_sorted_by_date if now - info.get("created", 0) <= HALF_YEAR]
+        
+        if len(recent_models) >= top_n:
+            target_models = recent_models
+        else:
+            target_models = all_sorted_by_date[:max(top_n, len(recent_models))]
+            
+        target_ratings = [info["rating"] for info in target_models]
+        median_rating = statistics.median(target_ratings) if target_ratings else 0.0
 
         closest_model_id = None
         min_diff = float('inf')

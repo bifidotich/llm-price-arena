@@ -830,8 +830,12 @@ async function upd() {
       var rc = i === 0 ? ' rank-1' : i === 1 ? ' rank-2' : i === 2 ? ' rank-3' : '';
       var rw = i === 0 ? ' rank-1-row' : i === 1 ? ' rank-2-row' : i === 2 ? ' rank-3-row' : '';
       var mName = x.model;
-      if (x.is_median) mName += ' <span style="font-size:0.7em; background:#f59e0b; color:#fff; padding:2px 4px; border-radius:4px; margin-left:6px">Median</span>';
-      tb += '<tr class="' + rw + '"><td class="rank' + rc + '">' + (i + 1) + '</td><td class="model">' + mName + '</td><td class="rating">' + x.rating.toFixed(1) + '</td><td class="price">$' + x.input_price_1M.toFixed(4) + '</td><td class="price">$' + x.output_price_1M.toFixed(4) + '</td><td style="color:#a78bfa; font-weight:700">' + Math.round(getValueForPreset(x, preset)) + '</td></tr>';
+      var rowStyle = '';
+      if (x.is_median) {
+        mName += ' <span style="font-size:0.7em; background:#f59e0b; color:#fff; padding:2px 4px; border-radius:4px; margin-left:6px">Median</span>';
+        rowStyle = 'background: rgba(245, 158, 11, 0.15);';
+      }
+      tb += '<tr class="' + rw + '" style="' + rowStyle + '"><td class="rank' + rc + '">' + (i + 1) + '</td><td class="model">' + mName + '</td><td class="rating">' + x.rating.toFixed(1) + '</td><td class="price">$' + x.input_price_1M.toFixed(4) + '</td><td class="price">$' + x.output_price_1M.toFixed(4) + '</td><td style="color:#a78bfa; font-weight:700">' + Math.round(getValueForPreset(x, preset)) + '</td></tr>';
     });
     tb += '</tbody></table>';
     document.getElementById('tbl').innerHTML = tb;
