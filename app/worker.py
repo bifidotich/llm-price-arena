@@ -77,12 +77,12 @@ def build_snapshot(cfg: dict) -> dict:
             categories[tab] = []
             continue
             
-        # Считаем медиану от моделей за последние 3 месяца (или берем N самых новых)
+        # Считаем медиану от моделей за последние 2 месяца (или берем N самых новых)
         now = time.time()
-        THREE_MONTHS = 90 * 24 * 3600
+        TWO_MONTHS = 60 * 24 * 3600
         
         all_sorted_by_date = sorted(matched_or.values(), key=lambda x: x.get("created", 0), reverse=True)
-        recent_models = [info for info in all_sorted_by_date if now - info.get("created", 0) <= THREE_MONTHS]
+        recent_models = [info for info in all_sorted_by_date if now - info.get("created", 0) <= TWO_MONTHS]
         
         if len(recent_models) >= top_n:
             target_models = recent_models

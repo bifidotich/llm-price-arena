@@ -937,7 +937,15 @@ async function upd() {
     document.getElementById('bChart').innerHTML = bc;
 
     // Table
-    var tb = '<table><thead><tr><th onclick="setSort(\'rating\')">#</th><th onclick="setSort(\'name\')">Model</th><th onclick="setSort(\'rating\')">Rating</th><th onclick="setSort(\'input\')">Input $/1M</th><th onclick="setSort(\'output\')">Output $/1M</th><th onclick="setSort(\'date\')">Release Date</th><th onclick="setSort(\'value\')">Value <span class="info-icon" onclick="openModal(event)">ⓘ</span></th></tr></thead><tbody>';
+    var tb = '<table><thead><tr>' +
+      '<th onclick="setSort(\'rating\')">#</th>' +
+      '<th onclick="setSort(\'name\')">Model ' + (currentSort === 'name' ? '↑' : (currentSort === 'name-desc' ? '↓' : '↕')) + '</th>' +
+      '<th onclick="setSort(\'rating\')">Rating ' + (currentSort === 'rating-desc' ? '↓' : (currentSort === 'rating-asc' ? '↑' : '↕')) + '</th>' +
+      '<th onclick="setSort(\'input\')">Input $/1M ' + (currentSort === 'input-desc' ? '↓' : (currentSort === 'input-asc' ? '↑' : '↕')) + '</th>' +
+      '<th onclick="setSort(\'output\')">Output $/1M ' + (currentSort === 'output-desc' ? '↓' : (currentSort === 'output-asc' ? '↑' : '↕')) + '</th>' +
+      '<th onclick="setSort(\'date\')">Release Date ' + (currentSort === 'date-desc' ? '↓' : (currentSort === 'date-asc' ? '↑' : '↕')) + '</th>' +
+      '<th onclick="setSort(\'value\')">Value ' + (currentSort === 'value-desc' ? '↓' : (currentSort === 'value-asc' ? '↑' : '↕')) + ' <span class="info-icon" onclick="openModal(event)">ⓘ</span></th>' +
+      '</tr></thead><tbody>';
     m.forEach(function(x, i) {
       var rc = i === 0 ? ' rank-1' : i === 1 ? ' rank-2' : i === 2 ? ' rank-3' : '';
       var rw = i === 0 ? ' rank-1-row' : i === 1 ? ' rank-2-row' : i === 2 ? ' rank-3-row' : '';
