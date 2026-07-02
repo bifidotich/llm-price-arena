@@ -814,41 +814,60 @@ async function upd() {
       return a.p - b.p;
     });
     
-    var frontier = [];
-    var maxR = -Infinity;
+    var numBins = 10;
+    var bins = [];
+    for (var i = 0; i < numBins; i++) bins.push([]);
     pts.forEach(function(pt) {
-      if (pt.r > maxR) {
-        frontier.push(pt);
-        maxR = pt.r;
-      }
+      var idx = Math.floor(((pt.p - minP) / (maxP - minP)) * numBins);
+      if (idx >= numBins) idx = numBins - 1;
+      if (idx < 0) idx = 0;
+      bins[idx].push(pt);
     });
     
-    if (frontier.length > 1) {
-      var frontierPts = frontier.map(function(pt) {
-        return {
-          p: pt.p,
-          r: pt.r,
-          px: padL + ((pt.p - minP) / (maxP - minP)) * innerW,
-          py: padT + innerH - ((pt.r - minR) / (maxR - minR)) * innerH
-        };
-      });
-      
+    var topPts = [];
+    bins.forEach(function(bin) {
+      if (bin.length > 0) {
+        var maxPt = bin[0];
+        bin.forEach(function(pt) {
+          if (pt.r > maxPt.r) maxPt = pt;
+        });
+        topPts.push({
+          p: maxPt.p,
+          r: maxPt.r,
+          px: padL + ((maxPt.p - minP) / (maxP - minP)) * innerW,
+          py: padT + innerH - ((maxPt.r - minR) / (maxR - minR)) * innerH
+        });
+      }
+    });
+
+    if (topPts.length > 1) {
       var svgPath = '';
-      svgPath += 'M ' + frontierPts[0].px + ' ' + frontierPts[0].py;
-      for (var i = 0; i < frontierPts.length - 1; i++) {
-        var p0 = frontierPts[i];
-        var p1 = frontierPts[i+1];
-        var dx = (p1.px - p0.px) / 2;
-        svgPath += ' C ' + (p0.px + dx) + ' ' + p0.py + ', ' + (p1.px - dx) + ' ' + p1.py + ', ' + p1.px + ' ' + p1.py;
+      svgPath += 'M ' + topPts[0].px + ' ' + topPts[0].py;
+      for (var i = 0; i < topPts.length - 1; i++) {
+        var p0 = topPts[i === 0 ? 0 : i - 1];
+        var p1 = topPts[i];
+        var p2 = topPts[i + 1];
+        var p3 = topPts[i + 2 < topPts.length ? i + 2 : i + 1];
+        
+        var tension = 0.25;
+        var cp1x = p1.px + (p2.px - p0.px) * tension;
+        var cp1y = p1.py + (p2.py - p0.py) * tension;
+        var cp2x = p2.px - (p3.px - p1.px) * tension;
+        var cp2y = p2.py - (p3.py - p1.py) * tension;
+        
+        if (cp1x < p1.px) cp1x = p1.px;
+        if (cp2x > p2.px) cp2x = p2.px;
+        
+        svgPath += ' C ' + cp1x + ' ' + cp1y + ', ' + cp2x + ' ' + cp2y + ', ' + p2.px + ' ' + p2.py;
       }
       
-      var fillPath = svgPath + ' L ' + frontierPts[frontierPts.length-1].px + ' ' + (padT + innerH) + ' L ' + frontierPts[0].px + ' ' + (padT + innerH) + ' Z';
+      var fillPath = svgPath + ' L ' + topPts[topPts.length-1].px + ' ' + (padT + innerH) + ' L ' + topPts[0].px + ' ' + (padT + innerH) + ' Z';
       
       var derivs = [];
-      for (var i = 0; i < frontierPts.length - 1; i++) {
-        var dp = frontierPts[i+1].p - frontierPts[i].p;
-        var dr = frontierPts[i+1].r - frontierPts[i].r;
-        derivs.push(dr / dp);
+      for (var i = 0; i < topPts.length - 1; i++) {
+        var dp = topPts[i+1].p - topPts[i].p;
+        var dr = topPts[i+1].r - topPts[i].r;
+        derivs.push(dr / Math.max(0.0001, dp));
       }
       
       var d2_arr = [];
@@ -856,9 +875,9 @@ async function upd() {
       for (var i = 1; i < derivs.length; i++) {
         var d1 = derivs[i-1];
         var d2 = derivs[i];
-        var dp_avg = (frontierPts[i+1].p - frontierPts[i-1].p) / 2;
-        var deriv2 = Math.abs((d2 - d1) / dp_avg);
-        d2_arr.push({ px: frontierPts[i].px, val: deriv2 });
+        var dp_avg = (topPts[i+1].p - topPts[i-1].p) / 2;
+        var deriv2 = Math.abs((d2 - d1) / Math.max(0.0001, dp_avg));
+        d2_arr.push({ px: topPts[i].px, val: deriv2 });
         if (deriv2 > maxD2) maxD2 = deriv2;
       }
       if (maxD2 === 0) maxD2 = 1;
@@ -870,10 +889,20 @@ async function upd() {
         });
         deriv2Path += 'M ' + d2_arr[0].px + ' ' + d2_arr[0].py;
         for (var i = 0; i < d2_arr.length - 1; i++) {
-          var p0 = d2_arr[i];
-          var p1 = d2_arr[i+1];
-          var dx = (p1.px - p0.px) / 2;
-          deriv2Path += ' C ' + (p0.px + dx) + ' ' + p0.py + ', ' + (p1.px - dx) + ' ' + p1.py + ', ' + p1.px + ' ' + p1.py;
+          var p0 = d2_arr[i === 0 ? 0 : i - 1];
+          var p1 = d2_arr[i];
+          var p2 = d2_arr[i + 1];
+          var p3 = d2_arr[i + 2 < d2_arr.length ? i + 2 : i + 1];
+          
+          var cp1x = p1.px + (p2.px - p0.px) * 0.25;
+          var cp1y = p1.py + (p2.py - p0.py) * 0.25;
+          var cp2x = p2.px - (p3.px - p1.px) * 0.25;
+          var cp2y = p2.py - (p3.py - p1.py) * 0.25;
+          
+          if (cp1x < p1.px) cp1x = p1.px;
+          if (cp2x > p2.px) cp2x = p2.px;
+          
+          deriv2Path += ' C ' + cp1x + ' ' + cp1y + ', ' + cp2x + ' ' + cp2y + ', ' + p2.px + ' ' + p2.py;
         }
       }
       
