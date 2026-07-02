@@ -498,15 +498,6 @@
       <select id="catSel"></select>
     </div>
     <div class="control-group">
-      <label>Top</label>
-      <select id="topSel">
-        <option value="10">10</option>
-        <option value="20">20</option>
-        <option value="50" selected>50</option>
-        <option value="0">All</option>
-      </select>
-    </div>
-    <div class="control-group">
       <label>Value Profile</label>
       <select id="presetSel"></select>
     </div>
@@ -515,7 +506,7 @@
 
   <div class="dashboard">
     <div class="card">
-      <h2 id="bTitle">Top Models — Rating, Prices & Value</h2>
+      <h2 id="bTitle">Models — Rating, Prices & Value</h2>
       <div class="chart-container" id="bChart" style="overflow-y:auto; height:auto; max-height:550px; padding-right: 16px;"></div>
     </div>
     
@@ -599,8 +590,8 @@ async function loadMeta() {
   upd();
 }
 
-async function fetchModels(category, top, preset) {
-  const url = '/api/models?category=' + encodeURIComponent(category) + '&preset=' + encodeURIComponent(preset) + '&top=' + top;
+async function fetchModels(category, preset) {
+  const url = '/api/models?category=' + encodeURIComponent(category) + '&preset=' + encodeURIComponent(preset);
   const resp = await fetch(url);
   if (!resp.ok) throw new Error('HTTP ' + resp.status);
   return await resp.json();
@@ -693,14 +684,13 @@ async function upd() {
   showLoading();
   try {
     var c = document.getElementById('catSel').value;
-    var n = parseInt(document.getElementById('topSel').value);
     var preset = document.getElementById('presetSel').value;
     
     if (!c || !preset) return;
     
     var result;
     try {
-      result = await fetchModels(c, n, preset);
+      result = await fetchModels(c, preset);
     } catch(e) {
       // API недоступен — показываем заглушку
       showDowntime(null);
@@ -855,7 +845,7 @@ async function upd() {
     document.getElementById('tbl').innerHTML = tb;
     document.getElementById('modelCount').textContent = m.length;
     document.getElementById('sTitle').textContent = 'Price vs Rating — ' + catName;
-    document.getElementById('bTitle').textContent = 'Top-' + (n === 0 ? m.length : n) + ' — ' + catName;
+    document.getElementById('bTitle').textContent = 'Models — ' + catName;
   } catch(e) {
     document.getElementById('sChart').innerHTML = '<div class="error-box">' + e.message + '</div>';
   }
@@ -877,7 +867,6 @@ window.hideTt = function() {
 };
 
 document.getElementById('catSel').addEventListener('change', upd);
-document.getElementById('topSel').addEventListener('change', upd);
 document.getElementById('presetSel').addEventListener('change', upd);
 
 document.getElementById('ptPrompt').addEventListener('click', function() {

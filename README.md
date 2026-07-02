@@ -28,7 +28,7 @@ docker compose up
 ```
 
 - **Dashboard:** <http://localhost:8000>
-- **API (example):** <http://localhost:8000/api/models?category=coding&preset=balanced&top=50>
+- **API (example):** <http://localhost:8000/api/models?category=coding&preset=balanced>
 - **Health endpoint:** <http://localhost:8000/api/health>
 
 ---
@@ -45,7 +45,7 @@ OpenRouter  ─────────┤   2. fetch prices                    
                      │   4. atomic write snapshot               │
                      └──────────────────────────────────────────┘
                                                                        │
-   static dashboard ──GET /api/models?category=&preset=&top=──► FastAPI ◄┘
+   static dashboard ──GET /api/models?category=&preset=───────────► FastAPI ◄┘
                     ──GET /api/health, /api/meta──────────────►
 ```
 
@@ -90,7 +90,7 @@ Where:
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/api/models?category=coding&preset=balanced&top=50` | Sorted model list with ratings, prices, and value scores |
+| `GET` | `/api/models?category=coding&preset=balanced` | Sorted model list with ratings, prices, and value scores |
 | `GET` | `/api/health` | Service status, last update timestamp, source health, unmatched model count |
 | `GET` | `/api/meta` | Available categories, presets, default preset, snapshot metadata |
 

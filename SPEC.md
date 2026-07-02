@@ -65,7 +65,7 @@ OpenRouter  ────┤   2. fetch prices                             │─
                 │   4. atomic write snapshot                    │
                 └───────────────────────────────────────────────┘
                                                                       │
-   static dashboard ──GET /api/models?category=&preset=&top=──► FastAPI ◄┘
+   static dashboard ──GET /api/models?category=&preset=───────────► FastAPI ◄┘
                     ──GET /api/health, /api/meta──────────────►
 ```
 
@@ -81,7 +81,7 @@ git clone <repo> && cd llm-value-tracker
 cp .env.example .env        # при необходимости вписать HF_TOKEN
 docker compose up
 # UI:   http://localhost:8000
-# API:  http://localhost:8000/api/models?category=coding&preset=balanced&top=50
+# API:  http://localhost:8000/api/models?category=coding&preset=balanced
 ```
 
 Вся конфигурация — `config.yaml` + переопределение через env. Тот же образ
@@ -93,7 +93,7 @@ docker compose up
 
 | Метод | Ответ |
 |-------|-------|
-| `GET /api/models?category=&preset=&top=` | отсортированный список: rating, input/output/blended price, value |
+| `GET /api/models?category=&preset=` | отсортированный список: rating, input/output/blended price, value |
 | `GET /api/health` | статус + время последнего успешного фетча каждого источника + кол-во unmatched |
 | `GET /api/meta` | список категорий, пресетов, версия/время снапшота |
 

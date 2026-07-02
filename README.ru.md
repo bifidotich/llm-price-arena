@@ -28,7 +28,7 @@ docker compose up
 ```
 
 - **Дашборд:** <http://localhost:8000>
-- **API (пример):** <http://localhost:8000/api/models?category=coding&preset=balanced&top=50>
+- **API (пример):** <http://localhost:8000/api/models?category=coding&preset=balanced>
 - **Health-check:** <http://localhost:8000/api/health>
 
 ---
@@ -45,7 +45,7 @@ OpenRouter  ─────────┤   2. загрузка цен         
                      │   4. атомарная запись снапшота           │
                      └──────────────────────────────────────────┘
                                                                        │
-   static dashboard ──GET /api/models?category=&preset=&top=──► FastAPI ◄┘
+   static dashboard ──GET /api/models?category=&preset=───────────► FastAPI ◄┘
                     ──GET /api/health, /api/meta──────────────►
 ```
 
@@ -90,7 +90,7 @@ OpenRouter  ─────────┤   2. загрузка цен         
 
 | Метод | Endpoint | Описание |
 |--------|----------|---------|
-| `GET` | `/api/models?category=coding&preset=balanced&top=50` | Отсортированный список моделей с рейтингами, ценами и value score |
+| `GET` | `/api/models?category=coding&preset=balanced` | Отсортированный список моделей с рейтингами, ценами и value score |
 | `GET` | `/api/health` | Статус сервиса, время последнего обновления, состояние источников, количество несматченных моделей |
 | `GET` | `/api/meta` | Доступные категории, пресеты, пресет по умолчанию, метаданные снапшота |
 
