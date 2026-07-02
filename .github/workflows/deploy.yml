@@ -82,6 +82,8 @@ jobs:
               STATUS=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/api/health 2>/dev/null || echo "000")
               if [ "$STATUS" = "200" ]; then
                 echo "  ✅ App is healthy!"
+                echo "[7/7] Cleaning up old Docker images to save VPS disk space..."
+                docker image prune -af || true
                 echo "✅ Deploy complete"
                 exit 0
               fi
