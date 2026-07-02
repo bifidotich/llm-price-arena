@@ -721,18 +721,19 @@ async function upd() {
       return;
     }
     
-    // Limit to Top N by rating if selected
+    // Scatter Plot filtering
+    var sc_m = m.slice();
     var topVal = parseInt(document.getElementById('topSel').value, 10);
     if (topVal > 0) {
-      m.sort(function(a, b) { return b.rating - a.rating; });
-      m = m.slice(0, topVal);
+      sc_m.sort(function(a, b) { return b.rating - a.rating; });
+      sc_m = sc_m.slice(0, topVal);
     }
     
-    // Sort by current sort key (after fetching - server sorts by value desc by default)
+    // Sort global m by current sort key (for table & bar chart)
     m = sortModels(m, currentSort, preset);
     
-    var prs = m.map(function(x) { return pt === 'input' ? x.input_price_1M : x.output_price_1M; });
-    var rts = m.map(function(x) { return x.rating; });
+    var prs = sc_m.map(function(x) { return pt === 'input' ? x.input_price_1M : x.output_price_1M; });
+    var rts = sc_m.map(function(x) { return x.rating; });
 
     var minP = Math.min.apply(null, prs);
     var maxP = Math.max.apply(null, prs);
@@ -771,11 +772,11 @@ async function upd() {
       sc += '<div class="scatter-label" style="bottom:5px; left:' + (x - 30) + 'px; width:60px; text-align:center">$' + p.toFixed(2) + '</div>';
     }
 
-    var scores = m.map(function(x) { return getValueForPreset(x, preset); });
+    var scores = sc_m.map(function(x) { return getValueForPreset(x, preset); });
     var minScore = Math.min.apply(null, scores);
     var maxScore = Math.max.apply(null, scores);
 
-    m.forEach(function(item, idx) {
+    sc_m.forEach(function(item, idx) {
       var graphPrice = pt === 'input' ? item.input_price_1M : item.output_price_1M;
       var x = padL + ((graphPrice - minP) / (maxP - minP)) * innerW;
       var y = padT + innerH - ((item.rating - minR) / (maxR - minR)) * innerH;
