@@ -3,6 +3,7 @@ name: Deploy LLM Price Arena
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -41,7 +42,7 @@ jobs:
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USER }}
-          key: ${{ secrets.SSH_KEY }}
+          password: ${{ secrets.PASSWORD }}
           port: ${{ secrets.PORT || '22' }}
           script: |
             set -e
