@@ -58,23 +58,37 @@ jobs:
             docker pull $IMAGE
 
             echo "[3/5] Ensuring app directory and clearing old cache (forces fresh data fetch)..."
-            mkdir -p $APP_DIR/data
-            rm -f $APP_DIR/data/*.json $APP_DIR/data/*.pickle 2>/dev/null || true
-            ufw allow 8000/tcp 2>/dev/null || true
-            ufw reload 2>/dev/null || true
+            if ! mkdir -p "$APP_DIR/data" 2>/dev/null; then
+              if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+                sudo mkdir -p "$APP_DIR/data"
+                sudo chown -R "$(id -u):$(id -g)" "$APP_DIR"
+              else
+                echo "⚠️ Cannot write to $APP_DIR, falling back to $HOME/llm-price-arena"
+                APP_DIR="$HOME/llm-price-arena"
+                mkdir -p "$APP_DIR/data"
+              fi
+            fi
+            rm -f "$APP_DIR"/data/*.json "$APP_DIR"/data/*.pickle 2>/dev/null || true
+            ufw allow 8000/tcp 2>/dev/null || sudo ufw allow 8000/tcp 2>/dev/null || true
+            ufw reload 2>/dev/null || sudo ufw reload 2>/dev/null || true
 
             echo "[4/5] Stopping old container..."
             docker stop llm-price-arena 2>/dev/null || true
             docker rm llm-price-arena 2>/dev/null || true
 
             echo "[5/5] Running new container..."
-            touch $APP_DIR/.env 2>/dev/null || true
+            ENV_ARG=""
+            if [ -f "$APP_DIR/.env" ] && [ -s "$APP_DIR/.env" ]; then
+              echo "  Using env file: $APP_DIR/.env"
+              ENV_ARG="--env-file $APP_DIR/.env"
+            fi
+
             docker run -d \
               --name llm-price-arena \
               --restart unless-stopped \
               -p 8000:8000 \
-              --env-file $APP_DIR/.env \
-              -v $APP_DIR/data:/app/data \
+              $ENV_ARG \
+              -v "$APP_DIR/data:/app/data" \
               $IMAGE
 
             echo "[6/6] Waiting for app to start (up to 90s)..."
