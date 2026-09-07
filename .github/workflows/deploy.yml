@@ -48,16 +48,19 @@ jobs:
             set -e
             APP_DIR=/opt/llm-price-arena
             IMAGE=ghcr.io/bifidotich/llm-price-arena:latest
+            DOMAIN="${{ secrets.DOMAIN }}"
+            ACME_EMAIL="${{ secrets.ACME_EMAIL }}"
 
-            echo "[1/5] Cleaning up disk space on VPS..."
-            docker system prune -af --volumes || true
+            echo "[1/8] Cleaning up disk space on VPS..."
+            # без --volumes: там лежат сертификаты Caddy (caddy_data)
+            docker system prune -af || true
 
-            echo "[2/5] Authenticating with GHCR (direct config.json)..."
+            echo "[2/8] Authenticating with GHCR (direct config.json)..."
             mkdir -p ~/.docker
             echo "{\"auths\":{\"ghcr.io\":{\"auth\":\"$(echo -n "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" | base64 -w0)\"}}}}" > ~/.docker/config.json
             docker pull $IMAGE
 
-            echo "[3/5] Ensuring app directory and clearing old cache (forces fresh data fetch)..."
+            echo "[3/8] Ensuring app directory and clearing old cache (forces fresh data fetch)..."
             if ! mkdir -p "$APP_DIR/data" 2>/dev/null; then
               if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
                 sudo mkdir -p "$APP_DIR/data"
@@ -69,14 +72,21 @@ jobs:
               fi
             fi
             rm -f "$APP_DIR"/data/*.json "$APP_DIR"/data/*.pickle 2>/dev/null || true
-            ufw allow 8000/tcp 2>/dev/null || sudo ufw allow 8000/tcp 2>/dev/null || true
+
+            echo "[4/8] Opening HTTP/HTTPS in firewall..."
+            for P in 80 443; do
+              ufw allow $P/tcp 2>/dev/null || sudo ufw allow $P/tcp 2>/dev/null || true
+            done
+            # порт приложения наружу больше не нужен — ходим только через прокси
+            ufw delete allow 8000/tcp 2>/dev/null || sudo ufw delete allow 8000/tcp 2>/dev/null || true
             ufw reload 2>/dev/null || sudo ufw reload 2>/dev/null || true
 
-            echo "[4/5] Stopping old container..."
+            echo "[5/8] Stopping old container..."
+            docker network create web 2>/dev/null || true
             docker stop llm-price-arena 2>/dev/null || true
             docker rm llm-price-arena 2>/dev/null || true
 
-            echo "[5/5] Running new container..."
+            echo "[6/8] Running new container..."
             ENV_ARG=""
             if [ -f "$APP_DIR/.env" ] && [ -s "$APP_DIR/.env" ]; then
               echo "  Using env file: $APP_DIR/.env"
@@ -86,27 +96,64 @@ jobs:
             docker run -d \
               --name llm-price-arena \
               --restart unless-stopped \
-              -p 8000:8000 \
+              --network web \
+              -p 127.0.0.1:8000:8000 \
               $ENV_ARG \
               -v "$APP_DIR/data:/app/data" \
               $IMAGE
 
-            echo "[6/6] Waiting for app to start (up to 90s)..."
+            echo "[7/8] Waiting for app to start (up to 90s)..."
+            HEALTHY=0
             for i in $(seq 1 30); do
               sleep 3
-              STATUS=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/api/health 2>/dev/null || echo "000")
+              STATUS=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/api/health 2>/dev/null || echo "000")
               if [ "$STATUS" = "200" ]; then
                 echo "  ✅ App is healthy!"
-                echo "[7/7] Cleaning up old Docker images to save VPS disk space..."
-                docker image prune -af || true
-                echo "✅ Deploy complete"
-                exit 0
+                HEALTHY=1
+                break
               fi
               echo "  Attempt $i/30 — HTTP $STATUS"
             done
-            echo "  ❌ Health check failed. Container logs:"
-            docker logs llm-price-arena --tail=50 2>/dev/null || true
-            echo "  ❌ Container status:"
-            docker ps -a 2>/dev/null || true
-            exit 1
+            if [ "$HEALTHY" != "1" ]; then
+              echo "  ❌ Health check failed. Container logs:"
+              docker logs llm-price-arena --tail=50 2>/dev/null || true
+              docker ps -a 2>/dev/null || true
+              exit 1
+            fi
 
+            echo "[8/8] Configuring reverse proxy (Caddy + Let's Encrypt)..."
+            if [ -z "$DOMAIN" ]; then
+              echo "  ⚠️ Secret DOMAIN не задан — прокси пропущен, приложение доступно только на localhost:8000"
+            else
+              {
+                if [ -n "$ACME_EMAIL" ]; then
+                  echo "{"
+                  echo "    email $ACME_EMAIL"
+                  echo "}"
+                  echo ""
+                fi
+                echo "$DOMAIN {"
+                echo "    encode zstd gzip"
+                echo "    reverse_proxy llm-price-arena:8000"
+                echo "}"
+              } > "$APP_DIR/Caddyfile"
+              echo "  --- Caddyfile ---"; cat "$APP_DIR/Caddyfile"
+
+              docker rm -f caddy 2>/dev/null || true
+              docker run -d \
+                --name caddy \
+                --restart unless-stopped \
+                --network web \
+                -p 80:80 -p 443:443 -p 443:443/udp \
+                -v "$APP_DIR/Caddyfile:/etc/caddy/Caddyfile:ro" \
+                -v caddy_data:/data \
+                -v caddy_config:/config \
+                caddy:2
+
+              sleep 5
+              docker logs caddy --tail=20 2>/dev/null || true
+              echo "  🌐 https://$DOMAIN"
+            fi
+
+            docker image prune -af || true
+            echo "✅ Deploy complete"
