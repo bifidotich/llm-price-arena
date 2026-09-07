@@ -140,16 +140,22 @@ jobs:
               echo "  --- Caddyfile ---"; cat "$APP_DIR/Caddyfile"
 
               docker rm -f caddy 2>/dev/null || true
-              docker run -d \
-                --name caddy \
-                --restart unless-stopped \
-                --network web \
-                -p 80:80 -p 443:443 -p 443:443/udp \
-                -v "$APP_DIR/Caddyfile:/etc/caddy/Caddyfile:ro" \
-                -v caddy_data:/data \
-                -v caddy_config:/config \
-                caddy:2
 
+              HOLDERS=$(docker ps --format "{{.Names}} {{.Image}} {{.Ports}}" | grep -E ":(80|443)->" || true)
+              if [ -n "$HOLDERS" ]; then
+                echo "  ❌ Ports 80/443 are already taken by other containers:"
+                echo "$HOLDERS"
+                echo "  App is deployed and reachable at 127.0.0.1:8000 — point the existing reverse proxy at it, or free the ports."
+                exit 1
+              fi
+
+              if ! docker run -d --name caddy --restart unless-stopped --network web -p 80:80 -p 443:443 -p 443:443/udp -v "$APP_DIR/Caddyfile:/etc/caddy/Caddyfile:ro" -v caddy_data:/data -v caddy_config:/config caddy:2; then
+                echo "  ❌ Caddy failed to start. Listeners on 80/443:"
+                ss -tlnp "( sport = :80 or sport = :443 )" 2>/dev/null || sudo ss -tlnp "( sport = :80 or sport = :443 )" 2>/dev/null || true
+                docker ps --format "{{.Names}} {{.Image}} {{.Ports}}" || true
+                echo "  App itself is running and healthy on 127.0.0.1:8000."
+                exit 1
+              fi
               sleep 5
               docker logs caddy --tail=20 2>/dev/null || true
               echo "  🌐 https://$DOMAIN"
