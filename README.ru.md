@@ -136,11 +136,13 @@ OpenRouter  ─────────┤   2. загрузка цен         
 
 1. **Верификация схемы датасета** — проверить имена колонок и значения категорий перед включением в боевой контур:
    ```bash
-   python -c "from datasets import load_dataset; \
-     d = load_dataset('lmarena-ai/leaderboard-dataset', 'text_style_control', split='latest'); \
-     print(d.features); print(d[0])"
+   python -c "from app.sources.lmarena import fetch_snapshot as f; \
+     b = f('lmarena-ai/leaderboard-dataset', 'text_style_control'); \
+     print(b.revision, b.publish_date); print(sorted(b.categories())); print(b.rows[0])"
    ```
    При необходимости обновить константы в `app/sources/lmarena.py` и фильтры категорий в `config.yaml`.
+   Неизвестная `category` больше не даёт молча пустую вкладку — воркер пишет
+   WARNING со списком категорий, которые в subset реально есть.
 
 2. **Покрытие алиасов** — неполные алиасы приводят к появлению несматченных моделей (отображаются в health-check). Расширять `config.yaml:model_aliases` по мере необходимости.
 
@@ -186,7 +188,7 @@ OpenRouter  ─────────┤   2. загрузка цен         
 | Веб-фреймворк | FastAPI 0.115 |
 | Планировщик | APScheduler 3.10 |
 | HTTP-клиент | httpx 0.27 |
-| Датасет | HuggingFace datasets 3.x |
+| Датасет | HuggingFace parquet по HTTP с пином ревизии (pyarrow 25.x) |
 | Конфигурация | PyYAML 6.x |
 | ASGI-сервер | Uvicorn (в составе FastAPI) |
 | Дашборд | Vanilla HTML/CSS/JS, pure JS scatter/barchart rendering |

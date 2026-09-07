@@ -11,7 +11,7 @@
 
 | Что | Откуда | Как |
 |-----|--------|-----|
-| Рейтинги (Elo) | HuggingFace dataset `lmarena-ai/leaderboard-dataset` | `datasets.load_dataset(subset, split="latest", filters=[("category","==",cat)])` |
+| Рейтинги (Elo) | HuggingFace dataset `lmarena-ai/leaderboard-dataset` | parquet сплита по HTTP с пином commit sha (`lmarena.fetch_snapshot`), фильтр по `category` — в памяти |
 | Цены | OpenRouter `GET /api/v1/models` | `pricing.prompt` / `pricing.completion` — цена за **токен**, привести к $/1M (× 1e6) |
 
 **Не** парсить HF Space `lmarena-ai/arena-leaderboard` — это iframe-обёртка вокруг

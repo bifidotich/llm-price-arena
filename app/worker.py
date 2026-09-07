@@ -54,18 +54,46 @@ def build_snapshot(cfg: dict) -> dict:
     all_unmatched: set[str] = set()
 
     import statistics
-    
+
     top_n = sc.get("top_n_for_median", 10)
 
-    # 2. По каждой категории: рейтинги → матчинг → value
+    # 2. LMArena: ревизия резолвится один раз на цикл, каждый subset качается
+    #    один раз (а не по разу на вкладку) и фильтруется по категориям в памяти.
+    lm_revision: str | None = None
+    try:
+        lm_revision = lmarena.resolve_revision(
+            lm_cfg["dataset"], lm_cfg.get("revision", "main")
+        )
+    except Exception as e:  # noqa: BLE001
+        log.warning("LMArena revision resolve failed: %s", e)
+        status["lmarena"] = f"error: {e}"
+
+    boards: dict[str, lmarena.Leaderboard] = {}
+    if lm_revision:
+        for subset in sorted({s["subset"] for s in lm_cfg["categories"].values()}):
+            try:
+                boards[subset] = lmarena.fetch_snapshot(
+                    lm_cfg["dataset"], subset, lm_cfg["split"], lm_revision
+                )
+            except Exception as e:  # noqa: BLE001
+                log.warning("LMArena fetch failed for subset %s: %s", subset, e)
+                status["lmarena"] = f"error: {e}"
+
+    # 3. По каждой категории: рейтинги → матчинг → value
     for tab, spec in lm_cfg["categories"].items():
-        try:
-            lm_models = lmarena.fetch_ratings(
-                lm_cfg["dataset"], spec["subset"], lm_cfg["split"], spec["category"]
+        board = boards.get(spec["subset"])
+        if board is None:
+            categories[tab] = []
+            continue
+
+        lm_models = board.by_category(spec["category"])
+        if not lm_models:
+            # Раньше опечатка в категории давала молча пустую вкладку.
+            log.warning(
+                "LMArena: категория %r отсутствует в %s/%s (есть: %s)",
+                spec["category"], spec["subset"], lm_cfg["split"],
+                ", ".join(sorted(board.categories())) or "—",
             )
-        except Exception as e:  # noqa: BLE001
-            log.warning("LMArena fetch failed for %s: %s", tab, e)
-            status["lmarena"] = f"error: {e}"
             categories[tab] = []
             continue
 
@@ -130,6 +158,17 @@ def build_snapshot(cfg: dict) -> dict:
     return {
         "updated_at": _now_iso(),
         "status": status,
+        "sources": {
+            "lmarena": {
+                "dataset": lm_cfg["dataset"],
+                "split": lm_cfg["split"],
+                # Полный sha: снапшот воспроизводим, дрейф `latest` виден.
+                "revision": lm_revision,
+                "publish_date": {
+                    subset: b.publish_date for subset, b in boards.items()
+                },
+            },
+        },
         "unmatched": sorted(all_unmatched),
         "presets": list(sc["presets"].keys()),
         "default_preset": sc.get("default_preset", "balanced"),

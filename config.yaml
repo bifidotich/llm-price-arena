@@ -28,15 +28,25 @@ sources:
   lmarena:
     dataset: lmarena-ai/leaderboard-dataset
     split: latest
+    # Ревизия датасета: `main` — свежая (резолвится в sha на каждом цикле и
+    # пишется в снапшот), либо полный commit sha для жёсткого пина/отката.
+    revision: main
     # Маппинг UI-вкладки → (subset датасета, значение поля category).
-    # ВНИМАНИЕ: точные имена subset'ов/категорий нужно сверить с датасетом
-    # (см. app/sources/lmarena.py — там TODO про инспекцию схемы).
+    # Схема сверена с датасетом на ревизии bc50ae8 (2026-09-06).
+    # В text_style_control/latest 29 категорий: overall, coding, math, expert,
+    # hard_prompts(_english), instruction_following, multi_turn, longer_query,
+    # creative_writing, exclude_ties, industry_* (8 шт.), языковые (english,
+    # chinese, russian, japanese, ...). Неизвестная категория больше не даёт
+    # молча пустую вкладку — воркер пишет WARNING со списком доступных.
     categories:
       overall:  { subset: text_style_control, category: overall }
       coding:   { subset: text_style_control, category: coding }
-      math:     { subset: text_style_control, category: coding }                    # временно — math как coding
+      math:     { subset: text_style_control, category: math }
       research: { subset: text_style_control, category: expert }
-      agent:    { subset: text_style_control, category: hard_prompts }              # временно — agent как hard
+      # Прокси, а не Agent Arena: в датасете есть subset `agent`, но он в шкале
+      # score 0..1, а не Elo — scoring.presets.k подобран под очки Elo и на
+      # такой шкале перестаёт влиять на value. Пока — hard_prompts.
+      agent:    { subset: text_style_control, category: hard_prompts }
   openrouter:
     url: https://openrouter.ai/api/v1/models
 

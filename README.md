@@ -136,11 +136,13 @@ All parameters are defined in [`config.yaml`](./config.yaml) and can be overridd
 
 1. **Dataset schema verification** — confirm column names and category values before enabling production workflows:
    ```bash
-   python -c "from datasets import load_dataset; \
-     d = load_dataset('lmarena-ai/leaderboard-dataset', 'text_style_control', split='latest'); \
-     print(d.features); print(d[0])"
+   python -c "from app.sources.lmarena import fetch_snapshot as f; \
+     b = f('lmarena-ai/leaderboard-dataset', 'text_style_control'); \
+     print(b.revision, b.publish_date); print(sorted(b.categories())); print(b.rows[0])"
    ```
    Update constants in `app/sources/lmarena.py` and category filters in `config.yaml` accordingly.
+   An unknown `category` no longer yields a silently empty tab — the worker logs a
+   warning listing the categories the subset actually has.
 
 2. **Model alias coverage** — incomplete aliases result in unmatched models (visible in health checks). Review and extend `config.yaml:model_aliases` as needed.
 
@@ -186,7 +188,7 @@ All parameters are defined in [`config.yaml`](./config.yaml) and can be overridd
 | Web framework | FastAPI 0.115 |
 | Scheduler | APScheduler 3.10 |
 | HTTP client | httpx 0.27 |
-| Dataset | HuggingFace datasets 3.x |
+| Dataset | HuggingFace parquet over HTTP, pinned revision (pyarrow 25.x) |
 | Configuration | PyYAML 6.x |
 | ASGI server | Uvicorn (included with FastAPI) |
 | Dashboard | Vanilla HTML/CSS/JS, pure JS scatter/barchart rendering |

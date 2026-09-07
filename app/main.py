@@ -104,6 +104,8 @@ def meta():
         "presets": snap["presets"],
         "default_preset": snap["default_preset"],
         "updated_at": snap["updated_at"],
+        # dataset/revision/publish_date источников; .get — старые снапшоты в кэше
+        "sources": snap.get("sources", {}),
         "unmatched": snap["unmatched"],
     }
 
