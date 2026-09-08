@@ -684,6 +684,34 @@ function getValueForPreset(item, preset) {
   return (item.value && item.value[preset] != null) ? item.value[preset] : 0;
 }
 
+// Домен шкалы value для баров и цвета точек.
+//
+// value — отношение к медиане категории, а не доля от сотни: шкала
+// логарифмическая по смыслу (одинаковые отрезки = одинаковые отношения), и
+// нормировать её линейно нельзя. Плюс строки, чью цену подменил price_floor,
+// в домен не входят — по той же причине, по которой они не входят в якорь
+// метрики: их value держится на константе конфига и уходит за 1000, забирая
+// весь диапазон себе. Рисуются они во всю ширину и помечены звёздочкой.
+// `getV` — потому что строки таблицы держат value объектом по пресетам,
+// а точки графика — уже числом.
+function valueDomain(items, getV) {
+  var vs = items.filter(function(x) { return !x.price_is_floored; })
+                .map(getV).filter(function(v) { return v > 0 && isFinite(v); });
+  if (!vs.length) {
+    vs = items.map(getV).filter(function(v) { return v > 0 && isFinite(v); });
+  }
+  if (!vs.length) return null;
+  return { lo: Math.log(Math.min.apply(null, vs)), hi: Math.log(Math.max.apply(null, vs)) };
+}
+
+// Доля 0..1 внутри домена; выше домена (бесплатные строки) — единица.
+function valueFraction(v, dom) {
+  if (!dom || !(v > 0) || !isFinite(v)) return 0;
+  if (!(dom.hi > dom.lo)) return 1;
+  var t = (Math.log(v) - dom.lo) / (dom.hi - dom.lo);
+  return t < 0 ? 0 : (t > 1 ? 1 : t);
+}
+
 // Полуширина 95% CI рейтинга. В верхушке таблицы она шире разрыва между
 // соседями, поэтому рейтинг без неё читается как точная величина, хотя ею
 // не является: метрика считает по нижней границе (SPEC.md §2).
@@ -897,6 +925,7 @@ function drawScatter() {
       rating: x.rating,
       price: price,
       axisPrice: Math.max(price, SC_PRICE_FLOOR),
+      price_is_floored: !!x.price_is_floored,
       value: getValueForPreset(x, preset)
     });
   });
@@ -930,9 +959,9 @@ function drawScatter() {
   maxR += rPad;
   if (!(maxR > minR)) { minR -= 10; maxR += 10; }
 
-  var values = pts.map(function(q) { return q.value; });
-  var minV = Math.min.apply(null, values);
-  var maxV = Math.max.apply(null, values);
+  var vDom = valueDomain(pts, function(q) { return q.value; });
+  var minV = vDom ? Math.exp(vDom.lo) : 0;
+  var maxV = vDom ? Math.exp(vDom.hi) : 0;
 
   function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); }
   // Клиппинг выбросов: координаты зажаты в область построения, а группа с
@@ -978,7 +1007,7 @@ function drawScatter() {
 
   var dots = '';
   pts.forEach(function(q) {
-    var col = scColor(maxV === minV ? 1 : (q.value - minV) / (maxV - minV));
+    var col = scColor(valueFraction(q.value, vDom));
     dots += '<g class="scatter-dot" data-name="' + esc(q.model) + '" data-rating="' + q.rating.toFixed(1) +
             '" data-price="' + q.price + '" data-value="' + Math.round(q.value) +
             '" data-x="' + q.x.toFixed(1) + '" data-y="' + q.y.toFixed(1) + '">' +
@@ -1175,11 +1204,7 @@ async function upd() {
     var minRBar = Math.min.apply(null, m.map(function(x) { return x.rating; })) - 20;
     if (maxRBar === minRBar) minRBar = maxRBar - 100;
 
-    var allScores = m.map(function(x) { return getValueForPreset(x, preset); });
-    var maxVBar = Math.max.apply(null, allScores);
-    var minVBar = Math.min.apply(null, allScores) - 10;
-    if (minVBar < 0) minVBar = 0;
-    if (maxVBar === minVBar) minVBar = maxVBar - 10;
+    var vDomBar = valueDomain(m, function(x) { return getValueForPreset(x, preset); });
 
     var maxInPrice = Math.max.apply(null, m.map(function(x) { return x.input_price_1M; })) || 1;
     var maxOutPrice = Math.max.apply(null, m.map(function(x) { return x.output_price_1M; })) || 1;
@@ -1195,7 +1220,7 @@ async function upd() {
       var rPct = ((x.rating - minRBar) / (maxRBar - minRBar)) * 100;
       if (rPct < 8) rPct = 8; if (rPct > 100) rPct = 100;
 
-      var vPct = ((getValueForPreset(x, preset) - minVBar) / (maxVBar - minVBar)) * 100;
+      var vPct = valueFraction(getValueForPreset(x, preset), vDomBar) * 100;
       if (vPct < 8) vPct = 8; if (vPct > 100) vPct = 100;
 
       var inPct = (x.input_price_1M / maxInPrice) * 100;
@@ -1209,10 +1234,10 @@ async function upd() {
       var inColor = 'linear-gradient(90deg,#10b981,#34d399)';
       var outColor = 'linear-gradient(90deg,#e11d48,#fb7185)';
 
-      var bName = x.model;
+      var bName = esc(x.model);
       var bRowStyle = x.is_median ? ' style="background: rgba(245, 158, 11, 0.15); border-radius: 6px; padding: 4px 8px; margin: -4px -8px 6px -8px;"' : '';
       bc += '<div class="bar-row"' + bRowStyle + '>' +
-        '<div class="bar-label-left" title="' + x.model + '">' + bName + '</div>' +
+        '<div class="bar-label-left" title="' + bName + '">' + bName + '</div>' +
         '<div class="bar-track"><div class="bar-fill" style="width:' + rPct + '%; background:' + rColor + '"></div><div class="bar-val">' + x.rating.toFixed(1) + '</div></div>' +
         '<div class="bar-track"><div class="bar-fill" style="width:' + inPct + '%; background:' + inColor + '"></div><div class="bar-val">$' + x.input_price_1M.toFixed(2) + '</div></div>' +
         '<div class="bar-track"><div class="bar-fill" style="width:' + outPct + '%; background:' + outColor + '"></div><div class="bar-val">$' + x.output_price_1M.toFixed(2) + '</div></div>' +
@@ -1236,7 +1261,7 @@ async function upd() {
       var rc = i === 0 ? ' rank-1' : i === 1 ? ' rank-2' : i === 2 ? ' rank-3' : '';
       var pCell = providerCell(x);
       var rw = i === 0 ? ' rank-1-row' : i === 1 ? ' rank-2-row' : i === 2 ? ' rank-3-row' : '';
-      var mName = x.model;
+      var mName = esc(x.model);
       var rowStyle = '';
       if (x.is_median) {
         rowStyle = 'background: rgba(245, 158, 11, 0.15);';

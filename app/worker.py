@@ -284,10 +284,49 @@ def build_snapshot(cfg: dict) -> dict:
     }
 
 
+def _degraded(snap: dict) -> list[str]:
+    """Причины считать снапшот негодным для записи в кэш.
+
+    Ошибки источников до сих пор оседали в `status`, но снапшот писался всё
+    равно: упавший OpenRouter — это пустые цены поверх валидного кэша, а
+    воркер ходит раз в несколько часов без присмотра.
+    """
+    reasons = [
+        f"{name}: {state}"
+        for name, state in snap.get("status", {}).items()
+        if state != "ok"
+    ]
+    categories = snap.get("categories", {})
+    # Переименование категории на стороне арены обнулило бы все вкладки разом
+    # и так же молча перезаписало бы кэш.
+    if categories and not any(categories.values()):
+        reasons.append("все категории пусты")
+    return reasons
+
+
 def refresh(cfg: dict, cache: Cache) -> dict:
-    """Полный цикл обновления; пишет в кэш и возвращает снапшот."""
+    """Полный цикл обновления; пишет в кэш и возвращает снапшот.
+
+    Битый снапшот в кэш не попадает: если источник упал, продолжает
+    отдаваться прошлый — устаревший `updated_at` виден в UI и в /api/meta,
+    и это честнее пустой таблицы.
+    """
     t0 = time.monotonic()
     snap = build_snapshot(cfg)
+
+    reasons = _degraded(snap)
+    if reasons:
+        previous = cache.read()
+        if previous is not None:
+            log.error(
+                "snapshot NOT written (%s) — оставлен прошлый от %s",
+                "; ".join(reasons), previous.get("updated_at", "?"),
+            )
+            return previous
+        # Кэша нет вовсе: пишем что есть, иначе сервис так и стоит на 503.
+        log.warning("snapshot degraded (%s), но кэш пуст — пишем как есть",
+                    "; ".join(reasons))
+
     cache.write(snap)
     log.info(
         "snapshot updated in %.1fs · status=%s · unmatched=%d",
