@@ -3,6 +3,10 @@ name: Deploy LLM Price Arena
 on:
   push:
     branches: [main]
+    # Правка в документации не меняет образ — не гоняем деплой ради markdown.
+    # Нужно всё равно выкатить — есть workflow_dispatch.
+    paths-ignore:
+      - '**.md'
   workflow_dispatch:
 
 jobs:
