@@ -13,7 +13,7 @@ LLM Price Arena is a monitoring and comparison tool that:
 - Fetches **Elo rankings** from the `lmarena-ai/leaderboard-dataset` HuggingFace dataset (categories: overall, coding, math, research, agent)
 - Retrieves **per-token pricing** from OpenRouter's public model registry
 - Maps model names between the two sources via a configurable alias table
-- Computes a **Value Score** metric balancing quality (Elo win probability) against cost (blended per-million-token price)
+- Computes a **Value Score** metric: price adjusted for quality (Elo), then normalized within each category so the leader scores 100
 - Caches results atomically and updates on a configurable schedule via APScheduler
 - Serves data through a FastAPI application with background worker
 
@@ -41,7 +41,7 @@ docker compose up
 LMArena HF ──────────┤   1. fetch ratings (latest)              │
 OpenRouter  ─────────┤   2. fetch prices                        │──► Cache
                      │   3. match via aliases → blended price,  │    (snapshot.json)
-                     │      win probability, value score        │
+                     │      effective price, value score       │
                      │   4. atomic write snapshot               │
                      └──────────────────────────────────────────┘
                                                                        │
@@ -55,7 +55,7 @@ OpenRouter  ─────────┤   2. fetch prices                    
 |-----------|------|----------------|
 | **API & Scheduler** | `app/main.py` | FastAPI application, lifespan-managed APScheduler, static file mount |
 | **Worker** | `app/worker.py` | Orchestrates fetching, matching, value computation, cache writes |
-| **Scoring Engine** | `app/scoring.py` | Value Score formula: win probability (Elo) × blended price with β/γ weights |
+| **Scoring Engine** | `app/scoring.py` | Value Score formula: quality-adjusted price (Elo → effective $/1M) normalized per category, with `k`/`γ` presets |
 | **Cache Layer** | `app/cache.py` | Abstract `Cache` interface + `FileCache` with atomic temp+rename writes |
 | **Config** | `app/config.py` | YAML configuration with environment variable overrides (`SECTION__KEY` syntax) |
 | **LMArena Source** | `app/sources/lmarena.py` | HuggingFace dataset loader for Elo leaderboard |
@@ -66,23 +66,43 @@ OpenRouter  ─────────┤   2. fetch prices                    
 
 ## Value Score Formula
 
-The core metric quantifies the economic efficiency of a model:
+The metric is computed in two steps: price is first adjusted for quality, then
+normalized within the category.
 
-<latex>Value = (WinProb^β / BlendedPrice^γ) × 100</latex>
+```
+M_top_N   = median(top_n highest-rated models)              # category anchor
+Δ         = rating - M_top_N                                # distance to the anchor
+price     = token_share × input + (1 - token_share) × output    # blended $/1M
+price     = max(price, price_floor_1M)                      # :free must not divide by zero
+price_eff = price × e^(-k·Δ)                                # $/1M at the anchor's quality
+value     = 100 × (min(price_eff) / price_eff)^γ            # 0..100, 100 = category leader
+```
 
-Where:
-
-- <latex>WinProb = 1 / (1 + 10^{(anchor - rating) / 400})</latex> — logistic Elo win probability against a fixed anchor (default 1400)
-- <latex>BlendedPrice = token_share × input_price + (1 - token_share) × output_price</latex> — weighted average cost per million tokens
-- <latex>β</latex>, <latex>γ</latex> — sensitivity parameters defined in **presets**
+- **`price_eff`** — what the model would cost if it were rated at the anchor.
+  It stays in dollars and ships in the snapshot as `effective_price_1M` per
+  preset; unlike the index, it can be read directly.
+- **`value`** — percent of the category leader's efficiency. Bounded above by
+  100, comparable **within one category and one preset only**.
+- The anchor is a median by **rating**, not by date: OpenRouter's `created` is
+  when the slug appeared in the catalog, not when the model shipped.
+- `top_n_for_median` (10), `token_share` (0.75 ≈ 3:1 in:out) and
+  `price_floor_1M` (0.01, just under the cheapest paid model on the market —
+  $0.025 as of 2026-09-08) live in the config.
+- `k` and `γ` come from **presets**. `k` is how much rating buys back price and
+  is the **only** parameter that changes the ordering; `γ` stretches the value
+  scale (`γ < 1` packs the distribution toward 100) without reordering anything.
 
 ### Presets
 
-| Preset | β | γ | Interpretation |
+| Preset | k | γ | Interpretation |
 |--------|---|---|---------------|
-| **quality** | 2.0 | 0.3 | Quality dominates; cost is secondary |
-| **balanced** | 1.0 | 0.5 | Default. Diminishing price sensitivity, balanced quality/cost trade-off |
-| **budget** | 1.0 | 1.0 | Linear cost sensitivity; each dollar counted equally |
+| **quality** | 0.015 | 0.3 | 100 Elo points ≈ 4.5× the price; dense scale, lagging behind is barely punished by cost |
+| **balanced** | 0.010 | 0.5 | Default: 100 Elo points ≈ 2.7× the price |
+| **budget** | 0.005 | 1.0 | 100 Elo points ≈ 1.6× the price; value is linear in effective price |
+
+Measured on the 2026-09-08 snapshot (`overall`, 175 models), the presets produce
+different but strongly correlated orderings — Kendall's τ of 0.66–0.84, with
+6–8 of the top 10 shared.
 
 ---
 
@@ -124,7 +144,8 @@ All parameters are defined in [`config.yaml`](./config.yaml) and can be overridd
 
 ### Critical configuration sections
 
-- **`scoring.presets`** — β/γ weights for each value profile
+- **`scoring.presets`** — `k`/`γ` weights for each value profile (`k` sets the ranking, `γ` only stretches the scale)
+- **`scoring.price_floor_1M`** — price floor in $/1M so `:free` models get a score instead of `null`
 - **`sources.lmarena.categories`** — mapping from UI tabs to dataset subsets and category filters
 - **`model_aliases`** — model name mapping between LMArena and OpenRouter identifiers
 

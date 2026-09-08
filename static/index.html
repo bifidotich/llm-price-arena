@@ -551,17 +551,22 @@
     <span class="modal-close" onclick="closeModal()">&times;</span>
     <div class="modal-title">Экономическая выгода модели (Value Score)</div>
     <div class="modal-body">
-      Алгоритм Экспоненциальной Эффективной Цены (Exponential Effective Price):
-      <div class="modal-formula" id="modalFormula">100 / (Price_eff^γ)</div>
-      Где Price_eff = BlendedPrice * e^(-k * Δ)
+      Цена, приведённая к качеству, и нормированная внутри категории:
+      <div class="modal-formula" id="modalFormula">100 · (Price_eff_min / Price_eff)^γ</div>
+      Где Price_eff = max(BlendedPrice, $0.01) · e^(-k · Δ)
       <br>Δ = Rating - MedianTopN
       <br><br>
       Текущие параметры весов:
-      <br>• <strong id="modalK">k = 0.01</strong> — чувствительность к рейтингу (штраф/награда за отличие от медианы).
-      <br>• <strong id="modalGamma">γ = 0.5</strong> — чувствительность к цене.
+      <strong>100</strong> — лучшая модель категории, <strong>25</strong> — вчетверо
+      менее выгодная по эффективной цене. Числа сравнимы только внутри одной
+      категории и одного пресета.
+      <br><br>
+      <br>• <strong id="modalK">k = 0.01</strong> — во сколько раз рейтинг искупает цену; порядок строк задаёт только он.
+      <br>• <strong id="modalGamma">γ = 0.5</strong> — растяжение шкалы value; на порядок строк не влияет.
       <hr style="margin: 10px 0; border: 0; border-top: 1px solid #2d3142;">
-      • <strong>MedianTopN</strong> — медианный рейтинг топ-моделей в категории за последние 2 месяца (подсвечена в таблице).
-      <br>• <strong>BlendedPrice</strong> — средневзвешенная стоимость 1M токенов (75% вход / 25% выход).
+      • <strong>MedianTopN</strong> — медианный рейтинг топ-10 моделей категории <em>по рейтингу</em> (модель, ближайшая к нему, подсвечена в таблице).
+      <br>• <strong>Price_eff</strong> — сколько стоила бы модель, будь у неё рейтинг медианы: отставание дорожает экспоненциально, опережение — дешевеет.
+      <br>• <strong>BlendedPrice</strong> — средневзвешенная стоимость 1M токенов (75% вход / 25% выход). Нижняя граница $0.01/1M нужна, чтобы бесплатные модели попадали в метрику, а не делили на ноль.
       <br>• Цена берётся не из каталога OpenRouter, а из списка эндпоинтов слага: у одного и того же
       слага провайдеры расходятся до 5x. Берётся самый дешёвый вариант на тех же весах, на которых
       снят рейтинг: отложенные тиры (flex) считаются — это та же модель, только в очереди, —
@@ -715,7 +720,7 @@ window.openModal = function(e) {
   const p = PRESETS[activePreset] || PRESETS.balanced;
   document.getElementById('modalK').textContent = 'k = ' + p.k.toFixed(3);
   document.getElementById('modalGamma').textContent = 'γ = ' + p.gamma.toFixed(1);
-  document.getElementById('modalFormula').textContent = '100 / (Price_eff^' + p.gamma.toFixed(1) + ')';
+  document.getElementById('modalFormula').textContent = '100 · (Price_eff_min / Price_eff)^' + p.gamma.toFixed(1);
   document.getElementById('infoModal').style.display = 'flex';
 };
 

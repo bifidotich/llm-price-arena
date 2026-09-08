@@ -7,7 +7,13 @@ from datetime import datetime, timezone
 
 from .cache import Cache
 from .matcher import auto_match_all
-from .scoring import blended_price, value_score
+from .scoring import (
+    DEFAULT_PRICE_FLOOR_1M,
+    blended_price,
+    effective_price,
+    median_top_rating,
+    value_score,
+)
 from .sources import lmarena, openrouter
 
 log = logging.getLogger("worker")
@@ -41,9 +47,8 @@ def build_snapshot(cfg: dict) -> dict:
     categories: dict[str, list[dict]] = {}
     all_unmatched: set[str] = set()
 
-    import statistics
-
     top_n = sc.get("top_n_for_median", 10)
+    price_floor = sc.get("price_floor_1M", DEFAULT_PRICE_FLOOR_1M)
 
     # 2. LMArena: ревизия резолвится один раз на цикл, каждый subset качается
     #    один раз (а не по разу на вкладку) и фильтруется по категориям в памяти.
@@ -114,20 +119,12 @@ def build_snapshot(cfg: dict) -> dict:
             categories[tab] = []
             continue
 
-        # Считаем медиану от моделей за последние 2 месяца (или берем N самых новых)
-        now = time.time()
-        TWO_MONTHS = 60 * 24 * 3600
-
-        all_sorted_by_date = sorted(matched_or.values(), key=lambda x: x.get("created", 0), reverse=True)
-        recent_models = [info for info in all_sorted_by_date if now - info.get("created", 0) <= TWO_MONTHS]
-
-        if len(recent_models) >= top_n:
-            target_models = recent_models
-        else:
-            target_models = all_sorted_by_date[:max(top_n, len(recent_models))]
-
-        target_ratings = [info["rating"] for info in target_models]
-        median_rating = statistics.median(target_ratings) if target_ratings else 0.0
+        # Якорь Δ — медиана топ-N по рейтингу (SPEC.md §2). Раньше медиана
+        # считалась по самым свежим моделям, то есть зависела от `created` =
+        # даты появления слага в OpenRouter, а не даты релиза модели.
+        median_rating = median_top_rating(
+            (info["rating"] for info in matched_or.values()), top_n
+        )
 
         closest_model_id = None
         min_diff = float('inf')
@@ -137,13 +134,37 @@ def build_snapshot(cfg: dict) -> dict:
                 min_diff = diff
                 closest_model_id = or_id
 
+        # Котировка есть почти всегда; info[input/output] — каталожный тариф
+        # из матчера, запасной вариант на случай сбоя всего блока цен.
+        row_prices: dict[str, tuple[float, float]] = {}
+        for or_id, info in matched_or.items():
+            quote = quotes.get(or_id)
+            row_prices[or_id] = (
+                quote.input if quote else info["input"],
+                quote.output if quote else info["output"],
+            )
+
+        # Эффективная цена по каждому пресету + лидер категории: value
+        # нормируется на него, поэтому шкала ограничена сотней и не зависит
+        # от абсолютного уровня цен в категории.
+        effs: dict[str, dict[str, float | None]] = {}
+        best_eff: dict[str, float | None] = {}
+        for preset, w in sc["presets"].items():
+            effs[preset] = {
+                or_id: effective_price(
+                    matched_or[or_id]["rating"], in_price, out_price,
+                    median_rating=median_rating, token_share=sc["token_share"],
+                    k=w["k"], price_floor=price_floor,
+                )
+                for or_id, (in_price, out_price) in row_prices.items()
+            }
+            known = [v for v in effs[preset].values() if v is not None]
+            best_eff[preset] = min(known) if known else None
+
         rows = []
         for or_id, info in matched_or.items():
-            # Котировка есть почти всегда; info[input/output] — каталожный
-            # тариф из матчера, запасной вариант на случай сбоя всего блока.
+            in_price, out_price = row_prices[or_id]
             quote = quotes.get(or_id)
-            in_price = quote.input if quote else info["input"]
-            out_price = quote.output if quote else info["output"]
             row = {
                 "model": or_id,
                 "rating": info["rating"],
@@ -157,14 +178,15 @@ def build_snapshot(cfg: dict) -> dict:
                 "price_source": quote.as_dict() if quote else None,
                 "is_median": or_id == closest_model_id,
                 "created": info.get("created", 0),
+                # Цена, приведённая к рейтингу медианы — то, что стоит за
+                # value: её, в отличие от индекса, можно прочитать как $/1M.
+                "effective_price_1M": {},
                 "value": {},
             }
             for preset, w in sc["presets"].items():
-                v = value_score(
-                    info["rating"], in_price, out_price,
-                    median_rating=median_rating, token_share=sc["token_share"],
-                    k=w["k"], gamma=w["gamma"],
-                )
+                eff = effs[preset][or_id]
+                v = value_score(eff, best_eff[preset], gamma=w["gamma"])
+                row["effective_price_1M"][preset] = round(eff, 4) if eff is not None else None
                 row["value"][preset] = round(v, 2) if v is not None else None
             rows.append(row)
 
