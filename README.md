@@ -212,7 +212,7 @@ All parameters are defined in [`config.yaml`](./config.yaml) and can be overridd
 | Dataset | HuggingFace parquet over HTTP, pinned revision (pyarrow 25.x) |
 | Configuration | PyYAML 6.x |
 | ASGI server | Uvicorn (included with FastAPI) |
-| Dashboard | Vanilla HTML/CSS/JS, pure JS scatter/barchart rendering |
+| Dashboard | Vanilla HTML/CSS/JS, hand-rolled SVG scatter + DOM bar chart |
 | Containerization | Docker + Docker Compose |
 
 ---

@@ -212,7 +212,7 @@ value     = 100 × (min(price_eff) / price_eff)^γ            # 0..100, 100 = л
 | Датасет | HuggingFace parquet по HTTP с пином ревизии (pyarrow 25.x) |
 | Конфигурация | PyYAML 6.x |
 | ASGI-сервер | Uvicorn (в составе FastAPI) |
-| Дашборд | Vanilla HTML/CSS/JS, pure JS scatter/barchart rendering |
+| Дашборд | Vanilla HTML/CSS/JS, самописный SVG-scatter + bar chart на DOM |
 | Контейнеризация | Docker + Docker Compose |
 
 ---

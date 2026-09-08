@@ -200,61 +200,65 @@
        font-weight: 500;
        font-size: .9em;
      }
-     .scatter-gridLine {
-       position: absolute;
-       background: rgba(45, 49, 66, 0.5);
-       transition: all 0.3s;
+     /* Scatter рисуется одним SVG — эти классы вешаются на SVG-узлы. */
+     .scatter-svg {
+       display: block;
+       touch-action: manipulation;
      }
-     .scatter-gridLine.v {
-       top: 0;
-       bottom: 25px;
-       width: 1px;
+     .scatter-gridline {
+       stroke: rgba(45, 49, 66, 0.55);
+       stroke-width: 1;
+       shape-rendering: crispEdges;
      }
-     .scatter-gridLine.h {
-       left: 60px;
-       right: 0;
-       height: 1px;
+     .scatter-axis {
+       stroke: rgba(45, 49, 66, 0.9);
+       stroke-width: 1;
+       shape-rendering: crispEdges;
      }
-     .scatter-label {
-       position: absolute;
-       color: #64748b;
-       font-size: .75em;
+     .scatter-tick {
+       fill: #64748b;
+       font-size: 11px;
        font-weight: 500;
      }
-     .scatter-dot-label {
-       position: absolute;
-       font-size: 0.68em;
-       color: #94a3b8;
-       white-space: nowrap;
+     .scatter-axis-title {
+       fill: #475569;
+       font-size: 10px;
+       font-weight: 700;
+       letter-spacing: 0.08em;
+     }
+     /* Подпись обводится фоном (paint-order), а не подложкой-прямоугольником:
+        прямоугольники сами по себе перекрывали соседние точки. */
+     .scatter-name {
+       fill: #94a3b8;
+       font-size: 11px;
        pointer-events: none;
-       z-index: 1;
-       background: rgba(15, 17, 23, 0.9);
-       padding: 1px 5px;
-       border-radius: 4px;
-       border-radius: 4px;
-       border: 1px solid rgba(45, 49, 66, 0.4);
+       paint-order: stroke;
+       stroke: rgba(15, 17, 23, 0.85);
+       stroke-width: 3px;
+       stroke-linejoin: round;
      }
-     .scatter-median-line {
-       position: absolute;
-       border: 1px dashed #6366f1;
-       z-index: 0;
-       opacity: 0.5;
+     .scatter-dot { cursor: pointer; }
+     .scatter-dot .mark {
+       stroke: #1e2230;
+       stroke-width: 2;
+       transition: r 0.15s, stroke 0.15s;
      }
-     .scatter-dot {
-       position: absolute;
-       width: 14px;
-       height: 14px;
-       border-radius: 50%;
-       transform: translate(-50%, -50%);
-       cursor: pointer;
-       transition: transform 0.2s, box-shadow 0.2s;
-       z-index: 2;
-       border: 2px solid #1e2230;
+     .scatter-dot:hover .mark,
+     .scatter-dot.active .mark {
+       r: 9;
+       stroke: #e2e8f0;
      }
-     .scatter-dot:hover {
-       transform: translate(-50%, -50%) scale(1.4);
-       z-index: 10;
-       box-shadow: 0 0 12px var(--c);
+     .scatter-front-area { fill: rgba(99, 102, 241, 0.10); }
+     .scatter-front-line {
+       fill: none;
+       stroke: rgba(129, 140, 248, 0.75);
+       stroke-width: 2;
+       stroke-linejoin: round;
+     }
+     .scatter-legend-text {
+       fill: #64748b;
+       font-size: 10px;
+       font-weight: 600;
      }
      .scatter-tooltip {
        position: absolute;
@@ -455,7 +459,6 @@
        .bar-row { gap: 6px; }
        .bar-track { height: 20px; }
        .bar-val { font-size: 0.65em; }
-       .scatter-dot-label { font-size: 0.58em; }
        .scatter-tooltip { font-size: 0.7em; max-width: 150px; }
        .table-card { padding: 8px; }
        table { font-size: 0.75em; }
@@ -480,8 +483,6 @@
        .table-card { padding: 4px; }
        table { font-size: 0.65em; }
        th, td { padding: 6px 6px; }
-       .scatter-dot-label { display: none; }
-       .scatter-dot { width: 8px; height: 8px; }
        th.provider, td.provider { display: none; }
        .modal-content { padding: 12px; }
        .modal-title { font-size: 0.95em; }
@@ -556,11 +557,11 @@
       Где Price_eff = max(BlendedPrice, $0.01) · e^(-k · Δ)
       <br>Δ = Rating - MedianTopN
       <br><br>
-      Текущие параметры весов:
       <strong>100</strong> — лучшая модель категории, <strong>25</strong> — вчетверо
       менее выгодная по эффективной цене. Числа сравнимы только внутри одной
       категории и одного пресета.
       <br><br>
+      Текущие параметры весов:
       <br>• <strong id="modalK">k = 0.01</strong> — во сколько раз рейтинг искупает цену; порядок строк задаёт только он.
       <br>• <strong id="modalGamma">γ = 0.5</strong> — растяжение шкалы value; на порядок строк не влияет.
       <hr style="margin: 10px 0; border: 0; border-top: 1px solid #2d3142;">
@@ -737,6 +738,7 @@ const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 let lastGoodData = null; // сохраняем последние свежие данные
 
 function showDowntime(result) {
+  scatterState = null;
   var msg = '<strong>⚠️ Service Unavailable</strong>';
   document.getElementById('subtitle').textContent = '⚠️ Service Unavailable';
   document.getElementById('updatedAt').textContent = result && result.updated_at ? new Date(result.updated_at).toLocaleString('ru-RU', { timeZone: 'UTC' }) + ' UTC (OUTDATED)' : '-';
@@ -749,6 +751,7 @@ function showDowntime(result) {
 }
 
 function showLoading() {
+  scatterState = null;
   document.getElementById('sChart').innerHTML = '<div class="loading-box">Loading data...</div>';
   document.getElementById('bChart').innerHTML = '<div class="loading-box">Loading data...</div>';
   document.getElementById('tbl').innerHTML = '';
@@ -758,6 +761,333 @@ function isDataFresh(updatedAt) {
   if (!updatedAt) return false;
   var age = Date.now() - new Date(updatedAt).getTime();
   return age < ONE_WEEK_MS;
+}
+
+// ---- Scatter: Price vs Rating -------------------------------------------
+// Вся геометрия — один SVG (сетка, оси, точки, подписи, фронт Парето).
+// HTML остаётся только у тултипа: текст с переносом и авто-высотой в SVG
+// не сверстать, а координаты у SVG и у контейнера здесь общие (viewBox 1:1).
+
+// Пол цены $/1M — тот же, что в scoring.py. Нужен только для координаты X:
+// на логарифмической оси бесплатные модели иначе уходят в -∞. В тултипе и
+// таблице цена остаётся настоящей.
+var SC_PRICE_FLOOR = 0.01;
+
+// Viridis (обрезанная снизу): монотонна по светлоте, поэтому порядок значений
+// читается и в градациях серого, и при дальтонизме — в отличие от прежнего
+// hue 270→140. Тёмный конец шкалы (#440154) отброшен: на фоне #0f1117
+// самые невыгодные модели сливались с подложкой.
+var SC_RAMP = ['#3e4a89', '#2a788e', '#22a884', '#5ec962', '#addc30', '#fde725'];
+
+function scColor(t) {
+  if (!isFinite(t)) return SC_RAMP[0];
+  t = Math.max(0, Math.min(1, t));
+  var pos = t * (SC_RAMP.length - 1);
+  var i = Math.min(SC_RAMP.length - 2, Math.floor(pos));
+  var f = pos - i;
+  var out = '#';
+  for (var c = 1; c < 7; c += 2) {
+    var a = parseInt(SC_RAMP[i].substr(c, 2), 16);
+    var b = parseInt(SC_RAMP[i + 1].substr(c, 2), 16);
+    out += ('0' + Math.round(a * (1 - f) + b * f).toString(16)).slice(-2);
+  }
+  return out;
+}
+
+function scFmtPrice(v) {
+  if (v >= 10) return '$' + v.toFixed(0);
+  if (v >= 1) return '$' + v.toFixed(1);
+  if (v >= 0.1) return '$' + v.toFixed(2);
+  return '$' + v.toFixed(3);
+}
+
+// Тики 1-2-5 по декадам: равномерные тики на логарифмической оси дают либо
+// кашу у левого края, либо две подписи на три порядка.
+function scLogTicks(min, max) {
+  var ticks = [];
+  for (var e = Math.floor(Math.log10(min)); e <= Math.ceil(Math.log10(max)); e++) {
+    [1, 2, 5].forEach(function(mant) {
+      var v = mant * Math.pow(10, e);
+      if (v >= min && v <= max) ticks.push(v);
+    });
+  }
+  if (ticks.length < 2) return [min, max];
+  while (ticks.length > 9) {
+    ticks = ticks.filter(function(_, i) { return i % 2 === 0; });
+  }
+  return ticks;
+}
+
+// Честный фронт Парето: модель на фронте, если ни одна более дешёвая не имеет
+// рейтинг не ниже. Прежняя версия брала максимум рейтинга в каждом из 10
+// равных бинов — при пустых бинах линия рвалась, при выбросах прыгала вниз,
+// и выпуклой огибающей не была.
+function scPareto(points) {
+  var sorted = points.slice().sort(function(a, b) {
+    return a.axisPrice - b.axisPrice || b.rating - a.rating;
+  });
+  var front = [];
+  var best = -Infinity;
+  sorted.forEach(function(q) {
+    if (q.rating > best) { front.push(q); best = q.rating; }
+  });
+  return front;
+}
+
+function scOverlap(a, b) {
+  return a.x1 < b.x2 && b.x1 < a.x2 && a.y1 < b.y2 && b.y1 < a.y2;
+}
+
+// Последняя отрисованная выборка: ререндер по resize идёт из неё, а не из
+// замыкания upd() — иначе при изменении ширины окна график остаётся в старой
+// геометрии.
+var scatterState = null;
+var scatterRaf = null;
+
+function renderScatter(models, preset) {
+  scatterState = { models: models, preset: preset };
+  drawScatter();
+}
+
+function drawScatter() {
+  var host = document.getElementById('sChart');
+  if (!host || !scatterState) return;
+
+  // Размеры читаются из DOM: высота #sChart различается по брейкпоинтам
+  // (600 / 400 / 320px), и захардкоженные 600 выносили точки за карточку.
+  var cw = host.clientWidth;
+  var ch = host.clientHeight;
+  if (cw < 80 || ch < 80) return;
+
+  var preset = scatterState.preset;
+  var pts = [];
+  (scatterState.models || []).forEach(function(x) {
+    var price = pt === 'input' ? x.input_price_1M : x.output_price_1M;
+    if (price == null || !isFinite(price) || price < 0) return;
+    if (x.rating == null || !isFinite(x.rating)) return;
+    pts.push({
+      model: x.model,
+      rating: x.rating,
+      price: price,
+      axisPrice: Math.max(price, SC_PRICE_FLOOR),
+      value: getValueForPreset(x, preset)
+    });
+  });
+  if (!pts.length) {
+    host.innerHTML = '<div class="error-box">No priced models</div>';
+    return;
+  }
+
+  var padL = 56, padR = 18, padT = 40, padB = 44;
+  var innerW = cw - padL - padR;
+  var innerH = ch - padT - padB;
+  if (innerW < 60 || innerH < 60) return;
+  var plotR = padL + innerW, plotB = padT + innerH;
+
+  // Домены. Вырожденный случай (одна модель, одинаковые цены или рейтинги)
+  // раньше давал деление на ноль → NaN в координатах и точки исчезали молча.
+  var prices = pts.map(function(q) { return q.axisPrice; });
+  var minP = Math.min.apply(null, prices) / 1.6;
+  var maxP = Math.max.apply(null, prices) * 1.6;
+  if (!(maxP > minP) || !isFinite(minP) || !isFinite(maxP)) {
+    minP = SC_PRICE_FLOOR;
+    maxP = SC_PRICE_FLOOR * 100;
+  }
+  var lminP = Math.log10(minP), lmaxP = Math.log10(maxP);
+
+  var ratings = pts.map(function(q) { return q.rating; });
+  var minR = Math.min.apply(null, ratings);
+  var maxR = Math.max.apply(null, ratings);
+  var rPad = Math.max((maxR - minR) * 0.08, 5);
+  minR -= rPad;
+  maxR += rPad;
+  if (!(maxR > minR)) { minR -= 10; maxR += 10; }
+
+  var values = pts.map(function(q) { return q.value; });
+  var minV = Math.min.apply(null, values);
+  var maxV = Math.max.apply(null, values);
+
+  function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); }
+  // Клиппинг выбросов: координаты зажаты в область построения, а группа с
+  // точками ещё и обрезана clipPath — точки больше не рисуются поверх осей.
+  function X(price) {
+    return clamp(padL + ((Math.log10(price) - lminP) / (lmaxP - lminP)) * innerW, padL, plotR);
+  }
+  function Y(rating) {
+    return clamp(padT + innerH - ((rating - minR) / (maxR - minR)) * innerH, padT, plotB);
+  }
+
+  pts.forEach(function(q) {
+    q.x = X(q.axisPrice);
+    q.y = Y(q.rating);
+  });
+
+  var grid = '', ticks = '';
+  for (var i = 0; i <= 5; i++) {
+    var r = minR + ((maxR - minR) / 5) * i;
+    var gy = Y(r);
+    grid += '<line class="scatter-gridline" x1="' + padL + '" y1="' + gy + '" x2="' + plotR + '" y2="' + gy + '"/>';
+    ticks += '<text class="scatter-tick" x="' + (padL - 8) + '" y="' + (gy + 4) + '" text-anchor="end">' + Math.round(r) + '</text>';
+  }
+  scLogTicks(minP, maxP).forEach(function(p) {
+    var gx = X(p);
+    grid += '<line class="scatter-gridline" x1="' + gx + '" y1="' + padT + '" x2="' + gx + '" y2="' + plotB + '"/>';
+    ticks += '<text class="scatter-tick" x="' + clamp(gx, 18, cw - 18) + '" y="' + (plotB + 16) + '" text-anchor="middle">' + scFmtPrice(p) + '</text>';
+  });
+
+  // Фронт Парето — ступенька: до следующей цены доступен тот же максимум
+  // рейтинга, поэтому горизонталь, затем вертикаль.
+  var front = scPareto(pts);
+  var frontSvg = '';
+  if (front.length > 1) {
+    var d = 'M ' + front[0].x + ' ' + front[0].y;
+    for (var f = 1; f < front.length; f++) {
+      d += ' L ' + front[f].x + ' ' + front[f - 1].y + ' L ' + front[f].x + ' ' + front[f].y;
+    }
+    d += ' L ' + plotR + ' ' + front[front.length - 1].y;
+    var area = d + ' L ' + plotR + ' ' + plotB + ' L ' + front[0].x + ' ' + plotB + ' Z';
+    frontSvg = '<path class="scatter-front-area" d="' + area + '"/><path class="scatter-front-line" d="' + d + '"/>';
+  }
+
+  var dots = '';
+  pts.forEach(function(q) {
+    var col = scColor(maxV === minV ? 1 : (q.value - minV) / (maxV - minV));
+    dots += '<g class="scatter-dot" data-name="' + esc(q.model) + '" data-rating="' + q.rating.toFixed(1) +
+            '" data-price="' + q.price + '" data-value="' + Math.round(q.value) +
+            '" data-x="' + q.x.toFixed(1) + '" data-y="' + q.y.toFixed(1) + '">' +
+            // Прозрачный круг побольше — палец не попадает в 7px.
+            '<circle cx="' + q.x + '" cy="' + q.y + '" r="14" fill="transparent"/>' +
+            '<circle class="mark" cx="' + q.x + '" cy="' + q.y + '" r="6" fill="' + col + '"/>' +
+            '</g>';
+  });
+
+  // Подписи: жадное разрешение коллизий по 4 позициям вокруг точки. Что не
+  // влезло — остаётся без подписи (имя всё равно доступно по тапу/ховеру),
+  // это честнее, чем прежнее чередование idx % 2 с наездами.
+  var names = '';
+  if (innerW >= 380 && innerH >= 200) {
+    var charW = 5.9, lineH = 12;
+    var boxes = pts.map(function(q) {
+      return { x1: q.x - 8, x2: q.x + 8, y1: q.y - 8, y2: q.y + 8 };
+    });
+    pts.slice().sort(function(a, b) { return b.value - a.value; }).forEach(function(q) {
+      var name = q.model;
+      var maxChars = Math.floor((innerW * 0.42) / charW);
+      if (name.length > maxChars) name = name.slice(0, Math.max(6, maxChars - 1)) + '…';
+      var w = name.length * charW + 4;
+      var cands = [
+        { x: q.x + 12, y: q.y + 4, anchor: 'start', x1: q.x + 12, x2: q.x + 12 + w },
+        { x: q.x - 12, y: q.y + 4, anchor: 'end', x1: q.x - 12 - w, x2: q.x - 12 },
+        { x: q.x, y: q.y - 13, anchor: 'middle', x1: q.x - w / 2, x2: q.x + w / 2 },
+        { x: q.x, y: q.y + 20, anchor: 'middle', x1: q.x - w / 2, x2: q.x + w / 2 }
+      ];
+      for (var ci = 0; ci < cands.length; ci++) {
+        var c = cands[ci];
+        var box = { x1: c.x1, x2: c.x2, y1: c.y - lineH + 2, y2: c.y + 3 };
+        if (box.x1 < padL || box.x2 > plotR || box.y1 < padT || box.y2 > plotB) continue;
+        var hit = false;
+        for (var bi = 0; bi < boxes.length; bi++) {
+          if (scOverlap(box, boxes[bi])) { hit = true; break; }
+        }
+        if (hit) continue;
+        boxes.push(box);
+        names += '<text class="scatter-name" x="' + c.x + '" y="' + c.y + '" text-anchor="' + c.anchor + '">' + esc(name) + '</text>';
+        break;
+      }
+    });
+  }
+
+  // Легенда цвета: без неё градиент точек ничего не значил.
+  var legend = '';
+  if (innerW >= 260) {
+    var lw = 100, lx = plotR - lw, ly = 14;
+    var stops = SC_RAMP.map(function(c, i) {
+      return '<stop offset="' + Math.round((i / (SC_RAMP.length - 1)) * 100) + '%" stop-color="' + c + '"/>';
+    }).join('');
+    legend = '<defs><linearGradient id="scRamp" x1="0" y1="0" x2="1" y2="0">' + stops + '</linearGradient></defs>' +
+      '<text class="scatter-axis-title" x="' + (lx - 10) + '" y="' + (ly + 8) + '" text-anchor="end">VALUE</text>' +
+      '<rect x="' + lx + '" y="' + ly + '" width="' + lw + '" height="7" rx="3" fill="url(#scRamp)"/>' +
+      '<text class="scatter-legend-text" x="' + lx + '" y="' + (ly + 19) + '">' + Math.round(minV) + '</text>' +
+      '<text class="scatter-legend-text" x="' + plotR + '" y="' + (ly + 19) + '" text-anchor="end">' + Math.round(maxV) + '</text>';
+  }
+
+  var axisX = (pt === 'input' ? 'INPUT' : 'OUTPUT') + ' $ / 1M TOKENS · LOG';
+  var midY = padT + innerH / 2;
+  var svg =
+    '<svg class="scatter-svg" width="' + cw + '" height="' + ch + '" viewBox="0 0 ' + cw + ' ' + ch + '">' +
+      '<defs><clipPath id="scPlot"><rect x="' + padL + '" y="' + padT + '" width="' + innerW + '" height="' + innerH + '"/></clipPath></defs>' +
+      legend +
+      grid +
+      '<g clip-path="url(#scPlot)">' + frontSvg + dots + names + '</g>' +
+      '<line class="scatter-axis" x1="' + padL + '" y1="' + padT + '" x2="' + padL + '" y2="' + plotB + '"/>' +
+      '<line class="scatter-axis" x1="' + padL + '" y1="' + plotB + '" x2="' + plotR + '" y2="' + plotB + '"/>' +
+      ticks +
+      '<text class="scatter-axis-title" x="' + (padL + innerW / 2) + '" y="' + (ch - 6) + '" text-anchor="middle">' + axisX + '</text>' +
+      '<text class="scatter-axis-title" x="14" y="' + midY + '" text-anchor="middle" transform="rotate(-90 14 ' + midY + ')">RATING</text>' +
+    '</svg>';
+
+  host.innerHTML = '<div class="scatter-tooltip" id="sTt"></div>' + svg;
+  scBindScatter(host);
+}
+
+function scBindScatter(host) {
+  var svg = host.querySelector('svg');
+  if (!svg) return;
+  function dotOf(e) {
+    return e.target && e.target.closest ? e.target.closest('.scatter-dot') : null;
+  }
+  svg.addEventListener('pointerover', function(e) {
+    if (e.pointerType && e.pointerType !== 'mouse') return;
+    var g = dotOf(e);
+    if (g) scShowTip(host, g);
+  });
+  svg.addEventListener('pointerout', function(e) {
+    if (e.pointerType && e.pointerType !== 'mouse') return;
+    if (dotOf(e)) scHideTip(host);
+  });
+  // Тап вместо ховера: на тач-экране hover не наступает никогда, и график
+  // превращался в облако безымянных точек.
+  svg.addEventListener('click', function(e) {
+    var g = dotOf(e);
+    if (g) scShowTip(host, g); else scHideTip(host);
+  });
+}
+
+function scShowTip(host, g) {
+  var tt = host.querySelector('#sTt');
+  if (!tt) return;
+  var price = parseFloat(g.getAttribute('data-price'));
+  tt.innerHTML = '<strong>' + esc(g.getAttribute('data-name')) + '</strong>' +
+    '<br/>Rating: ' + esc(g.getAttribute('data-rating')) +
+    '<br/>' + (pt === 'input' ? 'Input' : 'Output') + ': $' + price.toFixed(4) + ' / 1M' +
+    (price <= 0 ? ' (free)' : '') +
+    '<br/>Value: ' + esc(g.getAttribute('data-value'));
+  tt.style.display = 'block';
+
+  var prev = host.querySelectorAll('.scatter-dot.active');
+  for (var i = 0; i < prev.length; i++) prev[i].classList.remove('active');
+  g.classList.add('active');
+
+  // Тултип держится за точку, а не за курсор: при тапе палец закрывает точку,
+  // и позиция от touch-события уводила подсказку за край карточки.
+  var x = parseFloat(g.getAttribute('data-x'));
+  var y = parseFloat(g.getAttribute('data-y'));
+  var w = tt.offsetWidth, h = tt.offsetHeight;
+  var left = x + 16;
+  var top = y - h - 12;
+  if (left + w > host.clientWidth) left = x - 16 - w;
+  if (left < 0) left = Math.max(0, Math.min(x - w / 2, host.clientWidth - w));
+  if (top < 0) top = y + 18;
+  if (top + h > host.clientHeight) top = Math.max(0, host.clientHeight - h);
+  tt.style.left = left + 'px';
+  tt.style.top = top + 'px';
+}
+
+function scHideTip(host) {
+  var tt = host.querySelector('#sTt');
+  if (tt) tt.style.display = 'none';
+  var prev = host.querySelectorAll('.scatter-dot.active');
+  for (var i = 0; i < prev.length; i++) prev[i].classList.remove('active');
 }
 
 async function upd() {
@@ -811,181 +1141,7 @@ async function upd() {
     // Sort global m by current sort key (for table & bar chart)
     m = sortModels(m, currentSort, preset);
     
-    var prs = sc_m.map(function(x) { return pt === 'input' ? x.input_price_1M : x.output_price_1M; });
-    var rts = sc_m.map(function(x) { return x.rating; });
-
-    var minP = Math.min.apply(null, prs);
-    var maxP = Math.max.apply(null, prs);
-    if (maxP === minP) maxP = minP + 1;
-    var pPad = (maxP - minP) * 0.05;
-    if (pPad < 0.1) pPad = 0.1;
-    minP = Math.max(0, minP - pPad);
-    maxP = maxP + pPad;
-
-    var minR = Math.min.apply(null, rts);
-    var maxR = Math.max.apply(null, rts);
-    var rPad = (maxR - minR) * 0.05;
-    if (rPad < 5) rPad = 5;
-    minR = minR - rPad;
-    maxR = maxR + rPad;
-
-    // Scatter plot
-    var sc = '<div class="scatter-tooltip" id="sTt"></div>';
-    var cw = document.getElementById('sChart').clientWidth || 1150;
-    var ch = 600;
-    var padL = 60, padB = 35, padR = 120, padT = 25;
-    var innerW = cw - padL - padR;
-    var innerH = ch - padT - padB;
-
-    for (var i = 0; i <= 5; i++) {
-      var r = minR + ((maxR - minR) / 5) * i;
-      var y = padT + innerH - ((r - minR) / (maxR - minR)) * innerH;
-      sc += '<div class="scatter-gridLine h" style="top:' + y + 'px; left:' + padL + 'px; right:' + padR + 'px"></div>';
-      sc += '<div class="scatter-label" style="top:' + (y - 6) + 'px; left:5px; width:50px; text-align:right">' + Math.round(r) + '</div>';
-    }
-
-    for (var i = 0; i <= 5; i++) {
-      var p = minP + ((maxP - minP) / 5) * i;
-      var x = padL + ((p - minP) / (maxP - minP)) * innerW;
-      sc += '<div class="scatter-gridLine v" style="left:' + x + 'px; top:' + padT + 'px; bottom:' + padB + 'px"></div>';
-      sc += '<div class="scatter-label" style="bottom:5px; left:' + (x - 30) + 'px; width:60px; text-align:center">$' + p.toFixed(2) + '</div>';
-    }
-
-    var scores = sc_m.map(function(x) { return getValueForPreset(x, preset); });
-    var minScore = Math.min.apply(null, scores);
-    var maxScore = Math.max.apply(null, scores);
-
-    sc_m.forEach(function(item, idx) {
-      var graphPrice = pt === 'input' ? item.input_price_1M : item.output_price_1M;
-      var x = padL + ((graphPrice - minP) / (maxP - minP)) * innerW;
-      var y = padT + innerH - ((item.rating - minR) / (maxR - minR)) * innerH;
-      
-      var pct = (maxScore === minScore) ? 0.5 : (getValueForPreset(item, preset) - minScore) / (maxScore - minScore);
-      var hue = 270 - (pct * 130);
-      var col = 'hsl(' + hue + ', 85%, 60%)';
-      
-      var labelStyle = (idx % 2 === 0 || x < 110)
-        ? 'left:' + (x + 8) + 'px; top:' + (y - 6) + 'px;'
-        : 'left:' + (x - 92) + 'px; top:' + (y - 6) + 'px; text-align: right;';
-
-      var safeModel = item.model.replace(/'/g, '').replace(/"/g, '');
-      sc += '<div class="scatter-dot" style="left:' + x + 'px; top:' + y + 'px; --c:' + col + '; background:' + col + '" onmouseover="showTt(event,' + "'" + safeModel + "'" + ',' + item.rating + ',' + graphPrice + ',' + getValueForPreset(item, preset) + ')" onmouseout="hideTt()"></div>';
-      sc += '<div class="scatter-dot-label" style="' + labelStyle + '">' + item.model + '</div>';
-    });
-
-    // Trend line (Efficient Frontier / Concave Envelope)
-    var pts = [];
-    sc_m.forEach(function(item) {
-      var price = pt === 'input' ? item.input_price_1M : item.output_price_1M;
-      if (price >= 0 && item.rating > 0) {
-        pts.push({p: price, r: item.rating});
-      }
-    });
-    
-    pts.sort(function(a, b) {
-      if (a.p === b.p) return b.r - a.r;
-      return a.p - b.p;
-    });
-    
-    var numBins = 10;
-    var bins = [];
-    for (var i = 0; i < numBins; i++) bins.push([]);
-    pts.forEach(function(pt) {
-      var idx = Math.floor(((pt.p - minP) / (maxP - minP)) * numBins);
-      if (idx >= numBins) idx = numBins - 1;
-      if (idx < 0) idx = 0;
-      bins[idx].push(pt);
-    });
-    
-    var topPts = [];
-    bins.forEach(function(bin) {
-      if (bin.length > 0) {
-        var maxPt = bin[0];
-        bin.forEach(function(pt) {
-          if (pt.r > maxPt.r) maxPt = pt;
-        });
-        topPts.push({
-          p: maxPt.p,
-          r: maxPt.r,
-          px: padL + ((maxPt.p - minP) / (maxP - minP)) * innerW,
-          py: padT + innerH - ((maxPt.r - minR) / (maxR - minR)) * innerH
-        });
-      }
-    });
-
-    if (topPts.length > 1) {
-      var svgPath = '';
-      svgPath += 'M ' + topPts[0].px + ' ' + topPts[0].py;
-      for (var i = 0; i < topPts.length - 1; i++) {
-        var p0 = topPts[i === 0 ? 0 : i - 1];
-        var p1 = topPts[i];
-        var p2 = topPts[i + 1];
-        var p3 = topPts[i + 2 < topPts.length ? i + 2 : i + 1];
-        
-        var tension = 0.25;
-        var cp1x = p1.px + (p2.px - p0.px) * tension;
-        var cp1y = p1.py + (p2.py - p0.py) * tension;
-        var cp2x = p2.px - (p3.px - p1.px) * tension;
-        var cp2y = p2.py - (p3.py - p1.py) * tension;
-        
-        if (cp1x < p1.px) cp1x = p1.px;
-        if (cp2x > p2.px) cp2x = p2.px;
-        
-        svgPath += ' C ' + cp1x + ' ' + cp1y + ', ' + cp2x + ' ' + cp2y + ', ' + p2.px + ' ' + p2.py;
-      }
-      
-      var fillPath = svgPath + ' L ' + topPts[topPts.length-1].px + ' ' + (padT + innerH) + ' L ' + topPts[0].px + ' ' + (padT + innerH) + ' Z';
-      
-      var derivs = [];
-      for (var i = 0; i < topPts.length - 1; i++) {
-        var dp = topPts[i+1].p - topPts[i].p;
-        var dr = topPts[i+1].r - topPts[i].r;
-        derivs.push(dr / Math.max(0.0001, dp));
-      }
-      
-      var d2_arr = [];
-      var maxD2 = 0;
-      for (var i = 1; i < derivs.length; i++) {
-        var d1 = derivs[i-1];
-        var d2 = derivs[i];
-        var dp_avg = (topPts[i+1].p - topPts[i-1].p) / 2;
-        var deriv2 = Math.abs((d2 - d1) / Math.max(0.0001, dp_avg));
-        d2_arr.push({ px: topPts[i].px, val: deriv2 });
-        if (deriv2 > maxD2) maxD2 = deriv2;
-      }
-      if (maxD2 === 0) maxD2 = 1;
-      
-      var deriv2Path = '';
-      if (d2_arr.length > 0) {
-        d2_arr.forEach(function(d2pt) {
-          d2pt.py = padT + innerH - (d2pt.val / maxD2) * (innerH * 0.4);
-        });
-        deriv2Path += 'M ' + d2_arr[0].px + ' ' + d2_arr[0].py;
-        for (var i = 0; i < d2_arr.length - 1; i++) {
-          var p0 = d2_arr[i === 0 ? 0 : i - 1];
-          var p1 = d2_arr[i];
-          var p2 = d2_arr[i + 1];
-          var p3 = d2_arr[i + 2 < d2_arr.length ? i + 2 : i + 1];
-          
-          var cp1x = p1.px + (p2.px - p0.px) * 0.25;
-          var cp1y = p1.py + (p2.py - p0.py) * 0.25;
-          var cp2x = p2.px - (p3.px - p1.px) * 0.25;
-          var cp2y = p2.py - (p3.py - p1.py) * 0.25;
-          
-          if (cp1x < p1.px) cp1x = p1.px;
-          if (cp2x > p2.px) cp2x = p2.px;
-          
-          deriv2Path += ' C ' + cp1x + ' ' + cp1y + ', ' + cp2x + ' ' + cp2y + ', ' + p2.px + ' ' + p2.py;
-        }
-      }
-      
-      sc += '<svg style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:0; overflow:hidden;">' +
-            '<path d="' + fillPath + '" fill="rgba(99, 102, 241, 0.1)" stroke="none" />' +
-            (deriv2Path ? '<path d="' + deriv2Path + '" fill="none" stroke="rgba(16, 185, 129, 0.6)" stroke-width="2" stroke-dasharray="4,4" />' : '') +
-            '</svg>';
-    }
-
-    document.getElementById('sChart').innerHTML = sc;
+    renderScatter(sc_m, preset);
 
     // Bar chart
     var maxRBar = Math.max.apply(null, m.map(function(x) { return x.rating; }));
@@ -1072,21 +1228,6 @@ async function upd() {
   }
 }
 
-window.showTt = function(e, model, rating, price, value) {
-  var tt = document.getElementById('sTt');
-  if (!tt) return;
-  tt.style.display = 'block';
-  tt.innerHTML = '<strong>' + model + '</strong><br/>Rating: ' + rating + '<br/>Axis Price: $' + price.toFixed(4) + ' / 1M<br/>Value Score: ' + Math.round(value);
-  var rect = document.getElementById('sChart').getBoundingClientRect();
-  tt.style.left = (e.clientX - rect.left + 12) + 'px';
-  tt.style.top = (e.clientY - rect.top - 45) + 'px';
-};
-
-window.hideTt = function() {
-  var tt = document.getElementById('sTt');
-  if (tt) tt.style.display = 'none';
-};
-
 document.getElementById('catSel').addEventListener('change', upd);
 document.getElementById('topSel').addEventListener('change', upd);
 
@@ -1102,6 +1243,24 @@ document.getElementById('ptCompletion').addEventListener('click', function() {
   document.getElementById('ptPrompt').classList.toggle('active', false);
   upd();
 });
+
+// Ререндер графика при изменении размеров контейнера: геометрия читается из
+// DOM, поэтому смена ширины окна или брейкпоинта больше не оставляет график
+// в старых координатах.
+(function() {
+  var host = document.getElementById('sChart');
+  if (!host) return;
+  function redraw() {
+    if (!scatterState) return;
+    if (scatterRaf) cancelAnimationFrame(scatterRaf);
+    scatterRaf = requestAnimationFrame(function() {
+      scatterRaf = null;
+      drawScatter();
+    });
+  }
+  if (window.ResizeObserver) new ResizeObserver(redraw).observe(host);
+  else window.addEventListener('resize', redraw);
+})();
 
 
 function updateTimeDisplay() {
