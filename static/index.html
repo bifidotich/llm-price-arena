@@ -359,7 +359,10 @@
      .model { font-weight: 600; color: #fff; }
      .rating { font-weight: 700; color: #38bdf8; }
      .price { font-family: monospace; color: #34d399; }
-     
+     /* Чья это цена: у одного слага на OpenRouter цены расходятся до 5x. */
+     .provider { color: #94a3b8; white-space: nowrap; cursor: help; }
+     .provider .badge { color: #f59e0b; font-size: 0.85em; margin-left: 4px; }
+
      .info-icon {
        cursor: pointer;
        color: #a78bfa;
@@ -479,6 +482,7 @@
        th, td { padding: 6px 6px; }
        .scatter-dot-label { display: none; }
        .scatter-dot { width: 8px; height: 8px; }
+       th.provider, td.provider { display: none; }
        .modal-content { padding: 12px; }
        .modal-title { font-size: 0.95em; }
      }
@@ -499,7 +503,7 @@
       <label>Category</label>
       <select id="catSel"></select>
     </div>
-    <div class="stats">Models: <span id="modelCount">0</span> &middot; Updated: <span id="updatedAt">-</span></div>
+    <div class="stats">Models: <span id="modelCount">0</span> &middot; Updated: <span id="updatedAt">-</span> &middot; Price: <span id="priceNote">-</span></div>
   </div>
 
   <div class="dashboard">
@@ -558,6 +562,11 @@
       <hr style="margin: 10px 0; border: 0; border-top: 1px solid #2d3142;">
       • <strong>MedianTopN</strong> — медианный рейтинг топ-моделей в категории за последние 2 месяца (подсвечена в таблице).
       <br>• <strong>BlendedPrice</strong> — средневзвешенная стоимость 1M токенов (75% вход / 25% выход).
+      <br>• Цена берётся не из каталога OpenRouter, а из списка эндпоинтов слага: у одного и того же
+      слага провайдеры расходятся до 5x. Берётся самый дешёвый вариант на тех же весах, на которых
+      снят рейтинг: отложенные тиры (flex) считаются — это та же модель, только в очереди, —
+      а урезанные веса (fp4, int4) исключены, рейтинг снят не на них.
+      Чья именно цена в строке, видно в колонке Provider.
     </div>
   </div>
 </div>
@@ -568,6 +577,63 @@ let currentSort = 'value-desc';
 let metaData = { categories: [], presets: {}, default_preset: 'balanced' };
 
 const CAT_NAMES = { overall:'Overall', coding:'Coding', math:'Math', research:'Research', agent:'Agentic' };
+
+// Имена провайдеров и тегов приходят из внешнего API и попадают в innerHTML.
+function esc(v) {
+  return String(v == null ? '' : v).replace(/[&<>"']/g, function(c) {
+    return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+  });
+}
+
+const POLICY_LABEL = {
+  min: 'дешёвый сопоставимый эндпоинт',
+  median: 'медианный сопоставимый эндпоинт',
+  catalog: 'тариф по умолчанию (каталог OpenRouter)'
+};
+
+// Ячейка «чья это цена»: провайдер, а в подсказке — тир, квантизация и разброс
+// по слагу. Значок ≈ означает, что цена взята вне сопоставимого набора.
+function providerCell(x) {
+  var ps = x.price_source;
+  if (!ps) return '<td class="provider">—</td>';
+  var hint = ['Политика: ' + ps.policy + ' — ' + (POLICY_LABEL[ps.policy] || ps.policy)];
+  if (ps.tag) hint.push('Тег эндпоинта: ' + ps.tag);
+  if (ps.quantization) hint.push('Квантизация: ' + ps.quantization);
+  if (ps.endpoints_total) {
+    hint.push(ps.from === 'endpoints-all'
+      ? 'Эндпоинтов: ' + ps.endpoints_total + ', сопоставимых нет ни одного'
+      : 'Эндпоинтов: ' + ps.endpoints + ' сопоставимых из ' + ps.endpoints_total);
+  }
+  if (ps.min_blended_1M != null && ps.max_blended_1M != null) {
+    hint.push('Разброс blended: $' + ps.min_blended_1M + ' — $' + ps.max_blended_1M + ' / 1M');
+  }
+  var badge = '';
+  if (ps.from === 'catalog') {
+    hint.push('Детальных данных по эндпоинтам нет — тариф из каталога.');
+    badge = '<span class="badge">≈</span>';
+  } else if (ps.from === 'endpoints-all') {
+    hint.push('Сопоставимых эндпоинтов не осталось — выбор из всех, включая нестандартные.');
+    badge = '<span class="badge">≈</span>';
+  }
+  var label = ps.provider || (ps.from === 'catalog' ? 'каталог' : '—');
+  return '<td class="provider" title="' + esc(hint.join('\n')) + '">' + esc(label) + badge + '</td>';
+}
+
+// Подпись «чем меряем цену» — иначе числа в таблице непроверяемы.
+function renderPriceNote() {
+  const el = document.getElementById('priceNote');
+  if (!el) return;
+  const p = ((metaData.sources || {}).openrouter || {}).price;
+  if (!p) { el.textContent = '-'; return; }
+  el.textContent = (POLICY_LABEL[p.policy] || p.policy);
+  const parts = ['Политика выбора цены: ' + p.policy];
+  if (p.from_endpoints != null) {
+    parts.push('по эндпоинтам: ' + p.from_endpoints + ', по каталогу: ' + p.from_catalog);
+  }
+  if ((p.exclude_tiers || []).length) parts.push('исключены тиры: ' + p.exclude_tiers.join(', '));
+  if ((p.exclude_quantizations || []).length) parts.push('исключены квантизации: ' + p.exclude_quantizations.join(', '));
+  el.title = parts.join('\n');
+}
 const PRESETS = { quality: { label:'Quality-first', k:0.015, gamma:0.3 }, balanced: { label:'Balanced', k:0.01, gamma:0.5 }, budget: { label:'Budget-focused', k:0.005, gamma:1.0 } };
 
 async function loadMeta() {
@@ -589,7 +655,9 @@ async function loadMeta() {
     opt.textContent = CAT_NAMES[c] || c;
     catSel.appendChild(opt);
   });
-  
+
+  renderPriceNote();
+
 
   
   upd();
@@ -972,11 +1040,13 @@ async function upd() {
       '<th onclick="setSort(\'rating\')">Rating ' + (currentSort === 'rating-desc' ? '↓' : (currentSort === 'rating-asc' ? '↑' : '↕')) + '</th>' +
       '<th onclick="setSort(\'input\')">Input $/1M ' + (currentSort === 'input-desc' ? '↓' : (currentSort === 'input-asc' ? '↑' : '↕')) + '</th>' +
       '<th onclick="setSort(\'output\')">Output $/1M ' + (currentSort === 'output-desc' ? '↓' : (currentSort === 'output-asc' ? '↑' : '↕')) + '</th>' +
+      '<th class="provider">Provider</th>' +
       '<th onclick="setSort(\'date\')">Release Date ' + (currentSort === 'date-desc' ? '↓' : (currentSort === 'date-asc' ? '↑' : '↕')) + '</th>' +
       '<th onclick="setSort(\'value\')">Value ' + (currentSort === 'value-desc' ? '↓' : (currentSort === 'value-asc' ? '↑' : '↕')) + ' <span class="info-icon" onclick="openModal(event)">ⓘ</span></th>' +
       '</tr></thead><tbody>';
     m.forEach(function(x, i) {
       var rc = i === 0 ? ' rank-1' : i === 1 ? ' rank-2' : i === 2 ? ' rank-3' : '';
+      var pCell = providerCell(x);
       var rw = i === 0 ? ' rank-1-row' : i === 1 ? ' rank-2-row' : i === 2 ? ' rank-3-row' : '';
       var mName = x.model;
       var rowStyle = '';
@@ -985,7 +1055,7 @@ async function upd() {
       }
 
       var cDate = x.created ? new Date(x.created * 1000).toLocaleDateString('ru-RU') : '-';
-      tb += '<tr class="' + rw + '" style="' + rowStyle + '"><td class="rank' + rc + '">' + (i + 1) + '</td><td class="model">' + mName + '</td><td class="rating">' + x.rating.toFixed(1) + '</td><td class="price">$' + x.input_price_1M.toFixed(4) + '</td><td class="price">$' + x.output_price_1M.toFixed(4) + '</td><td style="color:#94a3b8">' + cDate + '</td><td style="color:#a78bfa; font-weight:700">' + Math.round(getValueForPreset(x, preset)) + '</td></tr>';
+      tb += '<tr class="' + rw + '" style="' + rowStyle + '"><td class="rank' + rc + '">' + (i + 1) + '</td><td class="model">' + mName + '</td><td class="rating">' + x.rating.toFixed(1) + '</td><td class="price">$' + x.input_price_1M.toFixed(4) + '</td><td class="price">$' + x.output_price_1M.toFixed(4) + '</td>' + pCell + '<td style="color:#94a3b8">' + cDate + '</td><td style="color:#a78bfa; font-weight:700">' + Math.round(getValueForPreset(x, preset)) + '</td></tr>';
     });
     tb += '</tbody></table>';
     document.getElementById('tbl').innerHTML = tb;
@@ -1056,18 +1126,26 @@ function updateTimeDisplay() {
 }
 setInterval(updateTimeDisplay, 30000);
 
+// Subtle debug button: download unmatched models list.
+// Сама кнопка объявлена ниже по документу, поэтому вешаться на неё можно
+// только после загрузки DOM — иначе getElementById даёт null и TypeError
+// обрывает выполнение скрипта.
+function bindDebugDownload() {
+  var btn = document.getElementById('debugDownload');
+  if (!btn) return;
+  btn.addEventListener('click', function() {
+    var a = document.createElement('a');
+    a.href = '/api/unmatched/download';
+    a.download = 'unmatched_models.txt';
+    a.click();
+  });
+}
+
 window.onload = function() {
   updateTimeDisplay();
+  bindDebugDownload();
   loadMeta();
 };
-
-// Subtle debug button: download unmatched models list
-document.getElementById('debugDownload').addEventListener('click', function() {
-  var a = document.createElement('a');
-  a.href = '/api/unmatched/download';
-  a.download = 'unmatched_models.txt';
-  a.click();
-});
 </script>
 
 <!-- Debug download button: barely visible, right bottom corner -->

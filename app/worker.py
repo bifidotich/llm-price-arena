@@ -29,23 +29,11 @@ def build_snapshot(cfg: dict) -> dict:
 
     status = {"openrouter": "ok", "lmarena": "ok"}
 
-    PER_MILLION = 1_000_000
-
-    # 1. OpenRouter: raw модели для матчинга + цены
+    # 1. OpenRouter: каталог. Он нужен для матчинга; цена из него — тариф
+    #    дефолтного эндпоинта, поэтому дальше уточняется по /endpoints.
     raw_models: list[dict] = []
-    prices: dict[str, dict[str, float]] = {}
     try:
         raw_models = openrouter.fetch_raw_models(or_cfg["url"])
-        for item in raw_models:
-            model_id = item.get("id")
-            pricing = item.get("pricing") or {}
-            try:
-                prompt = float(pricing.get("prompt", 0)) * PER_MILLION
-                completion = float(pricing.get("completion", 0)) * PER_MILLION
-            except (TypeError, ValueError):
-                continue
-            if model_id and prompt > 0:
-                prices[model_id] = {"input": prompt, "output": completion}
     except Exception as e:  # noqa: BLE001
         log.warning("OpenRouter fetch failed: %s", e)
         status["openrouter"] = f"error: {e}"
@@ -79,11 +67,13 @@ def build_snapshot(cfg: dict) -> dict:
                 log.warning("LMArena fetch failed for subset %s: %s", subset, e)
                 status["lmarena"] = f"error: {e}"
 
-    # 3. По каждой категории: рейтинги → матчинг → value
+    # 3. Матчинг по всем вкладкам сразу: полный набор слагов нужно знать
+    #    до похода за ценами, иначе детальные запросы уйдут по разу на вкладку.
+    matched_by_tab: dict[str, dict[str, dict]] = {}
     for tab, spec in lm_cfg["categories"].items():
         board = boards.get(spec["subset"])
         if board is None:
-            categories[tab] = []
+            matched_by_tab[tab] = {}
             continue
 
         lm_models = board.by_category(spec["category"])
@@ -94,29 +84,48 @@ def build_snapshot(cfg: dict) -> dict:
                 spec["category"], spec["subset"], lm_cfg["split"],
                 ", ".join(sorted(board.categories())) or "—",
             )
-            categories[tab] = []
+            matched_by_tab[tab] = {}
             continue
 
         # Автоматический матчинг (передаём raw OpenRouter модели, не prices dict)
         matched_or, unmatched_lm = auto_match_all(lm_models, raw_models)
         all_unmatched |= unmatched_lm
+        matched_by_tab[tab] = matched_or
 
+    # 4. Цены: по одному запросу /endpoints на слаг вместо каталожного тарифа
+    #    дефолтного эндпоинта. Слаги объединяются по всем вкладкам, поэтому
+    #    модель из трёх категорий стоит один запрос, а не три.
+    price_policy = openrouter.PricePolicy.from_config(or_cfg, sc["token_share"])
+    all_or_ids = {or_id for matched in matched_by_tab.values() for or_id in matched}
+    quotes: dict[str, openrouter.PriceQuote] = {}
+    price_stats: dict[str, int] = {}
+    if all_or_ids:
+        try:
+            quotes, price_stats = openrouter.quote_prices(
+                sorted(all_or_ids), raw_models, price_policy, or_cfg["url"]
+            )
+        except Exception as e:  # noqa: BLE001
+            log.warning("OpenRouter endpoint prices failed: %s", e)
+            status["openrouter"] = f"error: {e}"
+
+    # 5. По каждой вкладке: медиана → value → строки
+    for tab, matched_or in matched_by_tab.items():
         if not matched_or:
             categories[tab] = []
             continue
-            
+
         # Считаем медиану от моделей за последние 2 месяца (или берем N самых новых)
         now = time.time()
         TWO_MONTHS = 60 * 24 * 3600
-        
+
         all_sorted_by_date = sorted(matched_or.values(), key=lambda x: x.get("created", 0), reverse=True)
         recent_models = [info for info in all_sorted_by_date if now - info.get("created", 0) <= TWO_MONTHS]
-        
+
         if len(recent_models) >= top_n:
             target_models = recent_models
         else:
             target_models = all_sorted_by_date[:max(top_n, len(recent_models))]
-            
+
         target_ratings = [info["rating"] for info in target_models]
         median_rating = statistics.median(target_ratings) if target_ratings else 0.0
 
@@ -130,23 +139,29 @@ def build_snapshot(cfg: dict) -> dict:
 
         rows = []
         for or_id, info in matched_or.items():
-            price = {"input": info["input"], "output": info["output"]}
+            # Котировка есть почти всегда; info[input/output] — каталожный
+            # тариф из матчера, запасной вариант на случай сбоя всего блока.
+            quote = quotes.get(or_id)
+            in_price = quote.input if quote else info["input"]
+            out_price = quote.output if quote else info["output"]
             row = {
                 "model": or_id,
                 "rating": info["rating"],
                 "rank": info["rank"],
-                "input_price_1M": round(price["input"], 4),
-                "output_price_1M": round(price["output"], 4),
+                "input_price_1M": round(in_price, 4),
+                "output_price_1M": round(out_price, 4),
                 "blended_price_1M": round(
-                    blended_price(price["input"], price["output"], sc["token_share"]), 4
+                    blended_price(in_price, out_price, sc["token_share"]), 4
                 ),
+                # Чья это цена: провайдер, тир, квантизация, разброс по слагу.
+                "price_source": quote.as_dict() if quote else None,
                 "is_median": or_id == closest_model_id,
                 "created": info.get("created", 0),
                 "value": {},
             }
             for preset, w in sc["presets"].items():
                 v = value_score(
-                    info["rating"], price["input"], price["output"],
+                    info["rating"], in_price, out_price,
                     median_rating=median_rating, token_share=sc["token_share"],
                     k=w["k"], gamma=w["gamma"],
                 )
@@ -166,6 +181,17 @@ def build_snapshot(cfg: dict) -> dict:
                 "revision": lm_revision,
                 "publish_date": {
                     subset: b.publish_date for subset, b in boards.items()
+                },
+            },
+            "openrouter": {
+                "url": or_cfg["url"],
+                # Чем именно считается «цена модели» — иначе числа в таблице
+                # нечем поверить: у одного слага цены расходятся до 5x.
+                "price": {
+                    "policy": price_policy.policy,
+                    "exclude_tiers": sorted(price_policy.exclude_tiers),
+                    "exclude_quantizations": sorted(price_policy.exclude_quantizations),
+                    **price_stats,
                 },
             },
         },
