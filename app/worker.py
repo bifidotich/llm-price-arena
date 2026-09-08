@@ -9,9 +9,11 @@ from .cache import Cache
 from .matcher import auto_match_all
 from .scoring import (
     DEFAULT_PRICE_FLOOR_1M,
+    anchor_effective_price,
     blended_price,
     effective_price,
     median_top_rating,
+    price_is_floored,
     value_score,
 )
 from .sources import lmarena, openrouter
@@ -144,11 +146,22 @@ def build_snapshot(cfg: dict) -> dict:
                 quote.output if quote else info["output"],
             )
 
-        # Эффективная цена по каждому пресету + лидер категории: value
-        # нормируется на него, поэтому шкала ограничена сотней и не зависит
-        # от абсолютного уровня цен в категории.
+        # Строки, чью цену подменил price_floor (`:free` и грошовые слаги):
+        # их price_eff — константа конфига, поэтому в якорь они не идут.
+        floored = {
+            or_id: price_is_floored(
+                in_price, out_price,
+                token_share=sc["token_share"], price_floor=price_floor,
+            )
+            for or_id, (in_price, out_price) in row_prices.items()
+        }
+
+        # Эффективная цена по каждому пресету + якорь категории: value
+        # нормируется на медиану платных строк, поэтому шкала не зависит ни от
+        # абсолютного уровня цен в категории, ни от одной аномально дешёвой
+        # модели (раньше якорем был минимум, и его держал `:free` с полом).
         effs: dict[str, dict[str, float | None]] = {}
-        best_eff: dict[str, float | None] = {}
+        anchor_eff: dict[str, float | None] = {}
         for preset, w in sc["presets"].items():
             effs[preset] = {
                 or_id: effective_price(
@@ -158,8 +171,14 @@ def build_snapshot(cfg: dict) -> dict:
                 )
                 for or_id, (in_price, out_price) in row_prices.items()
             }
-            known = [v for v in effs[preset].values() if v is not None]
-            best_eff[preset] = min(known) if known else None
+            anchor = anchor_effective_price(
+                v for or_id, v in effs[preset].items() if not floored[or_id]
+            )
+            if anchor is None:
+                # Платных строк в категории нет вовсе — опереться не на что,
+                # кроме пола; пустая колонка value была бы хуже.
+                anchor = anchor_effective_price(effs[preset].values())
+            anchor_eff[preset] = anchor
 
         rows = []
         for or_id, info in matched_or.items():
@@ -176,6 +195,9 @@ def build_snapshot(cfg: dict) -> dict:
                 ),
                 # Чья это цена: провайдер, тир, квантизация, разброс по слагу.
                 "price_source": quote.as_dict() if quote else None,
+                # Цена ниже price_floor: в метрику пошёл сам порог, поэтому
+                # строка не участвовала в якоре и помечается в UI звёздочкой.
+                "price_is_floored": floored[or_id],
                 "is_median": or_id == closest_model_id,
                 "created": info.get("created", 0),
                 # Цена, приведённая к рейтингу медианы — то, что стоит за
@@ -185,7 +207,7 @@ def build_snapshot(cfg: dict) -> dict:
             }
             for preset, w in sc["presets"].items():
                 eff = effs[preset][or_id]
-                v = value_score(eff, best_eff[preset], gamma=w["gamma"])
+                v = value_score(eff, anchor_eff[preset], gamma=w["gamma"])
                 row["effective_price_1M"][preset] = round(eff, 4) if eff is not None else None
                 row["value"][preset] = round(v, 2) if v is not None else None
             rows.append(row)

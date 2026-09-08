@@ -13,7 +13,7 @@ LLM Price Arena is a monitoring and comparison tool that:
 - Fetches **Elo rankings** from the `lmarena-ai/leaderboard-dataset` HuggingFace dataset (categories: overall, coding, math, research, agent)
 - Retrieves **per-token pricing** from OpenRouter's public model registry
 - Maps model names between the two sources via a configurable alias table
-- Computes a **Value Score** metric: price adjusted for quality (Elo), then normalized within each category so the leader scores 100
+- Computes a **Value Score** metric: price adjusted for quality (Elo), then normalized within each category against the median model, which scores 100
 - Caches results atomically and updates on a configurable schedule via APScheduler
 - Serves data through a FastAPI application with background worker
 
@@ -55,7 +55,7 @@ OpenRouter  ─────────┤   2. fetch prices                    
 |-----------|------|----------------|
 | **API & Scheduler** | `app/main.py` | FastAPI application, lifespan-managed APScheduler, static file mount |
 | **Worker** | `app/worker.py` | Orchestrates fetching, matching, value computation, cache writes |
-| **Scoring Engine** | `app/scoring.py` | Value Score formula: quality-adjusted price (Elo → effective $/1M) normalized per category, with `k`/`γ` presets |
+| **Scoring Engine** | `app/scoring.py` | Value Score formula: quality-adjusted price (Elo → effective $/1M) normalized against the category median, with `k`/`γ` presets |
 | **Cache Layer** | `app/cache.py` | Abstract `Cache` interface + `FileCache` with atomic temp+rename writes |
 | **Config** | `app/config.py` | YAML configuration with environment variable overrides (`SECTION__KEY` syntax) |
 | **LMArena Source** | `app/sources/lmarena.py` | HuggingFace dataset loader for Elo leaderboard |
@@ -70,27 +70,39 @@ The metric is computed in two steps: price is first adjusted for quality, then
 normalized within the category.
 
 ```
-M_top_N   = median(top_n highest-rated models)              # category anchor
+M_top_N   = median(top_n highest-rated models)              # Δ anchor
 Δ         = rating - M_top_N                                # distance to the anchor
 price     = token_share × input + (1 - token_share) × output    # blended $/1M
+floored   = price < price_floor_1M                          # the floor replaced the price
 price     = max(price, price_floor_1M)                      # :free must not divide by zero
 price_eff = price × e^(-k·Δ)                                # $/1M at the anchor's quality
-value     = 100 × (min(price_eff) / price_eff)^γ            # 0..100, 100 = category leader
+P_anchor  = median(price_eff over rows with floored = false)    # value scale anchor
+value     = 100 × (P_anchor / price_eff)^γ                  # 100 = the category median
 ```
 
 - **`price_eff`** — what the model would cost if it were rated at the anchor.
   It stays in dollars and ships in the snapshot as `effective_price_1M` per
   preset; unlike the index, it can be read directly.
-- **`value`** — percent of the category leader's efficiency. Bounded above by
-  100, comparable **within one category and one preset only**.
-- The anchor is a median by **rating**, not by date: OpenRouter's `created` is
+- **`value`** — percent of the category median's efficiency. 100 matches the
+  median, above 100 beats it, below 100 costs more. Unbounded above; comparable
+  **within one category and one preset only**.
+- The scale anchor is a **median, not a minimum**. A minimum is held by one
+  arbitrary row, so a single unusually cheap model shifted everyone else's
+  value: in the 2026-09-08 snapshot `thinkingmachines/inkling:free` took the
+  100 and flattened the whole frontier to 3–4 points.
+- Rows with `floored = true` (`price_is_floored` in the snapshot) are **left out
+  of the anchor sample**: their `price_eff` is `price_floor_1M`, a config
+  constant rather than a market price. They stay in the table, marked with an
+  asterisk — their value rests on the floor and reads as "free", not as a
+  measured quantity.
+- The Δ anchor is a median by **rating**, not by date: OpenRouter's `created` is
   when the slug appeared in the catalog, not when the model shipped.
 - `top_n_for_median` (10), `token_share` (0.75 ≈ 3:1 in:out) and
   `price_floor_1M` (0.01, just under the cheapest paid model on the market —
   $0.025 as of 2026-09-08) live in the config.
 - `k` and `γ` come from **presets**. `k` is how much rating buys back price and
   is the **only** parameter that changes the ordering; `γ` stretches the value
-  scale (`γ < 1` packs the distribution toward 100) without reordering anything.
+  scale around 100 (`γ < 1` packs the distribution) without reordering anything.
 
 ### Presets
 

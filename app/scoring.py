@@ -5,10 +5,17 @@
 1. `effective_price` — «сколько стоила бы модель, будь у неё рейтинг медианы»:
    `price_eff = blended · e^(-k·Δ)`, где `Δ = rating - median`. Величина
    остаётся в $/1M и читается глазами: меньше — выгоднее.
-2. `value_score` — нормировка внутри категории: лучшая модель = 100,
-   остальные = `100 · (price_eff_best / price_eff)^γ`, то есть «сколько
-   процентов от эффективности лидера». Значение лежит в (0, 100] и сравнимо
-   только внутри одной категории и одного пресета.
+2. `value_score` — нормировка внутри категории на **медиану**:
+   `100 · (price_eff_anchor / price_eff)^γ`, то есть «сколько процентов от
+   эффективности медианной модели категории». 100 — как у медианы, больше —
+   выгоднее её, меньше — дороже. Сравнимо только внутри одной категории и
+   одного пресета.
+
+   Якорь — медиана, а не минимум: минимум держала одна произвольная строка,
+   и вся шкала категории зависела от того, попала ли в неё аномально дешёвая
+   модель. Из выборки якоря исключены строки, чью цену подменил `price_floor`
+   (`price_is_floored`): у них `price_eff` — не рынок, а константа, и одна
+   `:free`-модель утаскивала на себя всю сотню.
 
 Порядок строк задаёт **только `k`**: value монотонно убывает по `price_eff`,
 а возведение в степень `γ > 0` — монотонное преобразование, оно растягивает
@@ -71,14 +78,43 @@ def effective_price(
     return price * math.exp(exponent)
 
 
-def value_score(
-    price_eff: float | None, best_price_eff: float | None, *, gamma: float
-) -> float | None:
-    """0..100 внутри категории: 100 — лучшая эффективная цена в ней.
+def price_is_floored(
+    input_price: float,
+    output_price: float,
+    *,
+    token_share: float,
+    price_floor: float = DEFAULT_PRICE_FLOOR_1M,
+) -> bool:
+    """True, если в метрику пошла не цена модели, а сам `price_floor`.
 
-    `gamma` растягивает шкалу (0.3 — плотно у сотни, 1.0 — линейно по цене),
+    Такая строка (`:free`, грошовый слаг, битая цена) не участвует в выборе
+    якоря шкалы: её `price_eff` — константа конфига, а не рынок, и якорь от
+    неё зависеть не должен.
+    """
+    price = blended_price(input_price, output_price, token_share)
+    return not math.isfinite(price) or price < price_floor
+
+
+def anchor_effective_price(prices: Iterable[float | None]) -> float | None:
+    """Медиана `price_eff` — якорь шкалы value (SPEC.md §2).
+
+    Медиана, а не минимум: минимум держит одна строка, поэтому появление
+    в категории аномально дешёвой модели сдвигало value всем остальным.
+    """
+    known = [p for p in prices if p is not None and p > 0]
+    return statistics.median(known) if known else None
+
+
+def value_score(
+    price_eff: float | None, anchor_price_eff: float | None, *, gamma: float
+) -> float | None:
+    """Проценты от эффективности якоря: 100 — как у медианной модели категории.
+
+    Сверху не ограничено: больше 100 — выгоднее медианы. Взамен шкала не
+    зависит от того, есть ли в категории одна аномально дешёвая строка.
+    `gamma` растягивает её (0.3 — плотно у сотни, 1.0 — линейно по цене),
     но не меняет порядок строк.
     """
-    if not price_eff or not best_price_eff or price_eff <= 0 or best_price_eff <= 0:
+    if not price_eff or not anchor_price_eff or price_eff <= 0 or anchor_price_eff <= 0:
         return None
-    return 100.0 * (best_price_eff / price_eff) ** gamma
+    return 100.0 * (anchor_price_eff / price_eff) ** gamma

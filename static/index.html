@@ -553,13 +553,14 @@
     <div class="modal-title">Экономическая выгода модели (Value Score)</div>
     <div class="modal-body">
       Цена, приведённая к качеству, и нормированная внутри категории:
-      <div class="modal-formula" id="modalFormula">100 · (Price_eff_min / Price_eff)^γ</div>
+      <div class="modal-formula" id="modalFormula">100 · (Price_eff_median / Price_eff)^γ</div>
       Где Price_eff = max(BlendedPrice, $0.01) · e^(-k · Δ)
       <br>Δ = Rating - MedianTopN
       <br><br>
-      <strong>100</strong> — лучшая модель категории, <strong>25</strong> — вчетверо
-      менее выгодная по эффективной цене. Числа сравнимы только внутри одной
-      категории и одного пресета.
+      <strong>100</strong> — медианная модель категории, <strong>200</strong> — вдвое
+      выгоднее её по эффективной цене, <strong>50</strong> — вдвое дороже. Сверху
+      шкала не ограничена. Числа сравнимы только внутри одной категории и одного
+      пресета.
       <br><br>
       Текущие параметры весов:
       <br>• <strong id="modalK">k = 0.01</strong> — во сколько раз рейтинг искупает цену; порядок строк задаёт только он.
@@ -567,7 +568,9 @@
       <hr style="margin: 10px 0; border: 0; border-top: 1px solid #2d3142;">
       • <strong>MedianTopN</strong> — медианный рейтинг топ-10 моделей категории <em>по рейтингу</em> (модель, ближайшая к нему, подсвечена в таблице).
       <br>• <strong>Price_eff</strong> — сколько стоила бы модель, будь у неё рейтинг медианы: отставание дорожает экспоненциально, опережение — дешевеет.
+      <br>• <strong>Price_eff_median</strong> — медиана Price_eff по категории. Медиана, а не минимум: минимум держит одна строка, и одна аномально дешёвая модель сдвигала бы value всем остальным.
       <br>• <strong>BlendedPrice</strong> — средневзвешенная стоимость 1M токенов (75% вход / 25% выход). Нижняя граница $0.01/1M нужна, чтобы бесплатные модели попадали в метрику, а не делили на ноль.
+      <br>• <strong>Звёздочка</strong> у value — цена модели ниже $0.01/1M (`:free`), в метрику пошёл сам порог. Такие строки не участвуют в медиане-якоре, а их value держится на константе, а не на рынке.
       <br>• Цена берётся не из каталога OpenRouter, а из списка эндпоинтов слага: у одного и того же
       слага провайдеры расходятся до 5x. Берётся самый дешёвый вариант на тех же весах, на которых
       снят рейтинг: отложенные тиры (flex) считаются — это та же модель, только в очереди, —
@@ -680,6 +683,15 @@ function getValueForPreset(item, preset) {
   return (item.value && item.value[preset] != null) ? item.value[preset] : 0;
 }
 
+// Цену подменил price_floor: value такой строки стоит на константе конфига,
+// а не на рынке, и в медиану-якорь она не входила — помечаем звёздочкой.
+function valueCell(item, preset) {
+  var v = Math.round(getValueForPreset(item, preset));
+  if (!item.price_is_floored) return String(v);
+  return v + '<span title="Цена ниже $0.01/1M: в метрику пошёл порог, ' +
+         'в медиану-якорь строка не входила" style="opacity:.7">*</span>';
+}
+
 function sortModels(arr, sortKey, preset) {
   var a = arr.slice();
   
@@ -721,7 +733,7 @@ window.openModal = function(e) {
   const p = PRESETS[activePreset] || PRESETS.balanced;
   document.getElementById('modalK').textContent = 'k = ' + p.k.toFixed(3);
   document.getElementById('modalGamma').textContent = 'γ = ' + p.gamma.toFixed(1);
-  document.getElementById('modalFormula').textContent = '100 · (Price_eff_min / Price_eff)^' + p.gamma.toFixed(1);
+  document.getElementById('modalFormula').textContent = '100 · (Price_eff_median / Price_eff)^' + p.gamma.toFixed(1);
   document.getElementById('infoModal').style.display = 'flex';
 };
 
@@ -1189,7 +1201,7 @@ async function upd() {
         '<div class="bar-track"><div class="bar-fill" style="width:' + rPct + '%; background:' + rColor + '"></div><div class="bar-val">' + x.rating.toFixed(1) + '</div></div>' +
         '<div class="bar-track"><div class="bar-fill" style="width:' + inPct + '%; background:' + inColor + '"></div><div class="bar-val">$' + x.input_price_1M.toFixed(2) + '</div></div>' +
         '<div class="bar-track"><div class="bar-fill" style="width:' + outPct + '%; background:' + outColor + '"></div><div class="bar-val">$' + x.output_price_1M.toFixed(2) + '</div></div>' +
-        '<div class="bar-track"><div class="bar-fill" style="width:' + vPct + '%; background:' + vColor + '"></div><div class="bar-val">' + Math.round(getValueForPreset(x, preset)) + '</div></div>' +
+        '<div class="bar-track"><div class="bar-fill" style="width:' + vPct + '%; background:' + vColor + '"></div><div class="bar-val">' + valueCell(x, preset) + '</div></div>' +
         '</div>';
     });
     document.getElementById('bChart').innerHTML = bc;
@@ -1216,7 +1228,7 @@ async function upd() {
       }
 
       var cDate = x.created ? new Date(x.created * 1000).toLocaleDateString('ru-RU') : '-';
-      tb += '<tr class="' + rw + '" style="' + rowStyle + '"><td class="rank' + rc + '">' + (i + 1) + '</td><td class="model">' + mName + '</td><td class="rating">' + x.rating.toFixed(1) + '</td><td class="price">$' + x.input_price_1M.toFixed(4) + '</td><td class="price">$' + x.output_price_1M.toFixed(4) + '</td>' + pCell + '<td style="color:#94a3b8">' + cDate + '</td><td style="color:#a78bfa; font-weight:700">' + Math.round(getValueForPreset(x, preset)) + '</td></tr>';
+      tb += '<tr class="' + rw + '" style="' + rowStyle + '"><td class="rank' + rc + '">' + (i + 1) + '</td><td class="model">' + mName + '</td><td class="rating">' + x.rating.toFixed(1) + '</td><td class="price">$' + x.input_price_1M.toFixed(4) + '</td><td class="price">$' + x.output_price_1M.toFixed(4) + '</td>' + pCell + '<td style="color:#94a3b8">' + cDate + '</td><td style="color:#a78bfa; font-weight:700">' + valueCell(x, preset) + '</td></tr>';
     });
     tb += '</tbody></table>';
     document.getElementById('tbl').innerHTML = tb;
