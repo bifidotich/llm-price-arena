@@ -70,8 +70,9 @@ The metric is computed in two steps: price is first adjusted for quality, then
 normalized within the category.
 
 ```
-M_top_N   = median(top_n highest-rated models)              # Δ anchor
-Δ         = rating - M_top_N                                # distance to the anchor
+quality   = rating_lower  (rating_basis: lower)             # lower 95% CI bound
+M_top_N   = median(top_n highest by quality)                # Δ anchor
+Δ         = quality - M_top_N                               # distance to the anchor
 price     = token_share × input + (1 - token_share) × output    # blended $/1M
 floored   = price < price_floor_1M                          # the floor replaced the price
 price     = max(price, price_floor_1M)                      # :free must not divide by zero
@@ -95,6 +96,15 @@ value     = 100 × (P_anchor / price_eff)^γ                  # 100 = the catego
   constant rather than a market price. They stay in the table, marked with an
   asterisk — their value rests on the floor and reads as "free", not as a
   measured quantity.
+- The metric consumes the **lower bound of the 95% CI**, not the point estimate
+  (`scoring.rating_for_metric`, switched by `scoring.rating_basis`). Near the top
+  of the board the gap between neighbours is smaller than the interval: on the
+  2026-09-02 slice the `overall` top 10 spans 20.4 points at a median CI
+  half-width of 5.0, and 25 of its 45 pairs are statistically indistinguishable
+  (`|Δ| > √(hw_i² + hw_j²)`) — the top four included. A point estimate would sell
+  vote-sampling noise as quality; the lower bound withholds credit from models
+  that have not yet earned the lead on votes. The table still shows `rating`,
+  with `±` beside it.
 - The Δ anchor is a median by **rating**, not by date: OpenRouter's `created` is
   when the slug appeared in the catalog, not when the model shipped.
 - `top_n_for_median` (10), `token_share` (0.75 ≈ 3:1 in:out) and
@@ -115,6 +125,23 @@ value     = 100 × (P_anchor / price_eff)^γ                  # 100 = the catego
 Measured on the 2026-09-08 snapshot (`overall`, 175 models), the presets produce
 different but strongly correlated orderings — Kendall's τ of 0.66–0.84, with
 6–8 of the top 10 shared.
+
+**Calibrating `k`.** The reference point is the market's own slope: a regression
+of `ln(blended_price)` on rating over the paid rows of a category. It is measured
+every cycle and written to the snapshot as `calibration.<tab>.market_slope`
+(served from `/api/meta`), so the choice of `k` can be checked against the data
+instead of resting on taste. On 2026-09-08 the slope is 0.0056–0.0069 across tabs
+(`overall` 0.0069, R² 0.16 — rating explains only a sixth of the price spread).
+Against it, `budget` (0.005) tracks the market, `balanced` (0.010) is ~1.5× as
+steep, `quality` (0.015) ~2.2×.
+
+Raising `k` much further does not help, and this is **not** a tuning problem: a
+single `k` fixes the exchange rate across the whole range at once. Making the
+20.4-point spread of the top 10 worth real money (`k` = 0.035 buys 2.04×) blows
+the category's full 417-point span up to 2 200 000×, and what gets amplified is
+mostly noise — the CI half-width in the top 10 is ±5.0 points, so the band of
+indistinguishability (±7) is comparable to the spread itself. That is why the
+metric reads the lower CI bound instead of leaning harder on `k`.
 
 ---
 

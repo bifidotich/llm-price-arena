@@ -12,8 +12,10 @@ from .scoring import (
     anchor_effective_price,
     blended_price,
     effective_price,
+    market_price_slope,
     median_top_rating,
     price_is_floored,
+    rating_for_metric,
     value_score,
 )
 from .sources import lmarena, openrouter
@@ -51,6 +53,12 @@ def build_snapshot(cfg: dict) -> dict:
 
     top_n = sc.get("top_n_for_median", 10)
     price_floor = sc.get("price_floor_1M", DEFAULT_PRICE_FLOOR_1M)
+    rating_basis = sc.get("rating_basis", "lower")
+
+    # Эмпирический ориентир для `k`: наклон ln(price) по рейтингу на самих
+    # данных. Пишется в снапшот по каждой вкладке, чтобы выбор `k` можно было
+    # сверить с рынком, а не держать «на глаз» (REWORK.md §3).
+    calibration: dict[str, dict] = {}
 
     # 2. LMArena: ревизия резолвится один раз на цикл, каждый subset качается
     #    один раз (а не по разу на вкладку) и фильтруется по категориям в памяти.
@@ -121,17 +129,26 @@ def build_snapshot(cfg: dict) -> dict:
             categories[tab] = []
             continue
 
+        # В метрику идёт не точечная оценка, а нижняя граница CI: в верхушке
+        # разрыв между соседями меньше ширины интервала, и точечный рейтинг
+        # выдаёт за качество шум выборки голосов (SPEC.md §2). Показывается
+        # при этом по-прежнему `rating`.
+        metric_rating = {
+            or_id: rating_for_metric(
+                info["rating"], info.get("rating_lower"), basis=rating_basis
+            )
+            for or_id, info in matched_or.items()
+        }
+
         # Якорь Δ — медиана топ-N по рейтингу (SPEC.md §2). Раньше медиана
         # считалась по самым свежим моделям, то есть зависела от `created` =
         # даты появления слага в OpenRouter, а не даты релиза модели.
-        median_rating = median_top_rating(
-            (info["rating"] for info in matched_or.values()), top_n
-        )
+        median_rating = median_top_rating(metric_rating.values(), top_n)
 
         closest_model_id = None
         min_diff = float('inf')
-        for or_id, info in matched_or.items():
-            diff = abs(info["rating"] - median_rating)
+        for or_id in matched_or:
+            diff = abs(metric_rating[or_id] - median_rating)
             if diff < min_diff:
                 min_diff = diff
                 closest_model_id = or_id
@@ -165,7 +182,7 @@ def build_snapshot(cfg: dict) -> dict:
         for preset, w in sc["presets"].items():
             effs[preset] = {
                 or_id: effective_price(
-                    matched_or[or_id]["rating"], in_price, out_price,
+                    metric_rating[or_id], in_price, out_price,
                     median_rating=median_rating, token_share=sc["token_share"],
                     k=w["k"], price_floor=price_floor,
                 )
@@ -180,6 +197,21 @@ def build_snapshot(cfg: dict) -> dict:
                 anchor = anchor_effective_price(effs[preset].values())
             anchor_eff[preset] = anchor
 
+        # Наклон рынка: во сколько раз он сам берёт за очко рейтинга.
+        # `k` выше наклона — метрика тянет к качеству, ниже — к цене.
+        priced = [
+            (metric_rating[or_id], blended_price(i, o, sc["token_share"]))
+            for or_id, (i, o) in row_prices.items()
+            if not floored[or_id]
+        ]
+        calibration[tab] = {
+            "market_slope": market_price_slope(
+                (r for r, _ in priced), (p for _, p in priced)
+            ),
+            "rating_basis": rating_basis,
+            "n_priced": len(priced),
+        }
+
         rows = []
         for or_id, info in matched_or.items():
             in_price, out_price = row_prices[or_id]
@@ -187,6 +219,10 @@ def build_snapshot(cfg: dict) -> dict:
             row = {
                 "model": or_id,
                 "rating": info["rating"],
+                # Границы 95% CI: в верхушке они шире разрыва между соседями,
+                # поэтому таблица показывает ±, а метрика берёт нижнюю.
+                "rating_lower": info.get("rating_lower", info["rating"]),
+                "rating_upper": info.get("rating_upper", info["rating"]),
                 "rank": info["rank"],
                 "input_price_1M": round(in_price, 4),
                 "output_price_1M": round(out_price, 4),
@@ -240,6 +276,8 @@ def build_snapshot(cfg: dict) -> dict:
             },
         },
         "unmatched": sorted(all_unmatched),
+        # Наклон «цена ~ рейтинг» по каждой вкладке — ориентир для выбора `k`.
+        "calibration": calibration,
         "presets": list(sc["presets"].keys()),
         "default_preset": sc.get("default_preset", "balanced"),
         "categories": categories,

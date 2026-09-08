@@ -20,6 +20,11 @@ parquet напрямую, без зависимости `datasets`:
 ВНИМАНИЕ: `score` агентных арен лежит в диапазоне 0..1, а не в Elo-шкале.
 Подставлять его в scoring.value_score с `k`, подобранным под очки Elo, нельзя —
 рейтинг перестанет влиять на результат. См. Leaderboard.scale.
+
+Границы доверительного интервала читаются наравне с самим рейтингом: разница
+между соседями в верхушке таблицы меньше ширины CI (на ревизии bc50ae8 в топ-10
+`overall` 25 пар из 45 статистически неразличимы), поэтому метрика считается по
+нижней границе, а не по точечной оценке — см. `scoring.rating_for_metric`.
 """
 from __future__ import annotations
 
@@ -51,10 +56,17 @@ COL_RATING = "rating"
 COL_SCORE = "score"
 COL_VOTES = "vote_count"
 COL_OBSERVATIONS = "observation_count"
+# Границы 95% CI. У обычных арен они же выводятся из `variance`
+# (rating ± 1.96·√variance), у агентных лежат под своими именами.
+COL_RATING_LOWER = "rating_lower"
+COL_RATING_UPPER = "rating_upper"
+COL_SCORE_LOWER = "score_ci_lower"
+COL_SCORE_UPPER = "score_ci_upper"
 
 _WANTED_COLUMNS = (
     COL_MODEL, COL_ORG, COL_RANK, COL_CATEGORY, COL_DATE,
     COL_RATING, COL_SCORE, COL_VOTES, COL_OBSERVATIONS,
+    COL_RATING_LOWER, COL_RATING_UPPER, COL_SCORE_LOWER, COL_SCORE_UPPER,
 )
 
 _SHA_RE = re.compile(r"[0-9a-f]{40}")
@@ -153,6 +165,17 @@ def _read_parquet(dataset: str, path: str, revision: str, timeout: float) -> lis
     return pq.read_table(buf, columns=columns).to_pylist()
 
 
+def _as_float(*candidates) -> float:
+    """Первое значение, которое приводится к float; последнее — гарантия."""
+    for c in candidates:
+        try:
+            if c is not None:
+                return float(c)
+        except (TypeError, ValueError):
+            continue
+    return 0.0
+
+
 def _row(raw: dict) -> dict | None:
     """Приводит строку датасета к виду, который ждут matcher и worker."""
     model = raw.get(COL_MODEL)
@@ -171,9 +194,16 @@ def _row(raw: dict) -> dict | None:
     if votes is None:
         votes = raw.get(COL_OBSERVATIONS)
 
+    # Границы CI: у агентных арен под своими именами, а если их нет вовсе —
+    # схлопываются в саму оценку, и метрика ведёт себя как раньше.
+    lower = _as_float(raw.get(COL_RATING_LOWER), raw.get(COL_SCORE_LOWER), rating)
+    upper = _as_float(raw.get(COL_RATING_UPPER), raw.get(COL_SCORE_UPPER), rating)
+
     return {
         "model": model,
         "rating": rating,
+        "rating_lower": min(lower, rating),
+        "rating_upper": max(upper, rating),
         "rank": int(rank) if rank is not None else None,
         # matcher.auto_match_all читает org для слоя "organization + name"
         "org": raw.get(COL_ORG) or "",

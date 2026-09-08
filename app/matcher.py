@@ -210,12 +210,14 @@ def auto_match_all(
     """Матчит все LM модели против OpenRouter.
 
     Args:
-        lm_models: [{model, rating, rank}, ...] из fetch_ratings
+        lm_models: [{model, rating, rating_lower, rating_upper, rank}, ...]
+            из fetch_snapshot
         or_models: список OpenRouter API моделей
 
     Returns:
         (matched, unmatched):
-          matched: {or_id: {input, output, rating, rank}}
+          matched: {or_id: {input, output, rating, rating_lower,
+                    rating_upper, rank, created}}
           unmatched: set LM model names без матча
     """
     or_by_norm, hf_to_or = index_openrouter(or_models)
@@ -251,6 +253,10 @@ def auto_match_all(
                     "input": price["input"],
                     "output": price["output"],
                     "rating": lm["rating"],
+                    # Границы CI: метрика считается по нижней, показывается
+                    # точечная оценка (SPEC.md §2).
+                    "rating_lower": lm.get("rating_lower", lm["rating"]),
+                    "rating_upper": lm.get("rating_upper", lm["rating"]),
                     "rank": lm["rank"],
                     "created": or_by_norm[norm_key].get("created", 0),
                 }

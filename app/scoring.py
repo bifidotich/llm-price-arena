@@ -37,6 +37,55 @@ DEFAULT_PRICE_FLOOR_1M = 0.01
 MAX_EXPONENT = 30.0
 
 
+# Какое число качества идёт в метрику. `lower` — нижняя граница 95% CI:
+# у верхушки таблицы разрыв между соседями меньше ширины интервала, и точечная
+# оценка выдаёт за качество то, что на деле шум выборки голосов.
+RATING_BASES = ("lower", "point")
+
+
+def rating_for_metric(
+    rating: float, rating_lower: float | None, *, basis: str = "lower"
+) -> float:
+    """Рейтинг, по которому считается price_eff.
+
+    `point` — как в датасете; `lower` — нижняя граница CI, то есть качество,
+    в котором можно быть уверенным. Модель с сотней голосов и широким
+    интервалом перестаёт получать кредит за лидерство, которого не доказала.
+    Границы нет — поведение сходится к `point`.
+    """
+    if basis == "point" or rating_lower is None:
+        return rating
+    if basis not in RATING_BASES:
+        raise ValueError(f"rating_basis: ожидалось одно из {RATING_BASES}, получено {basis!r}")
+    return min(rating, rating_lower)
+
+
+def market_price_slope(
+    ratings: Iterable[float], prices: Iterable[float]
+) -> float | None:
+    """Наклон ln(price) по рейтингу — во сколько раз рынок сам берёт за очко.
+
+    Эмпирический ориентир для `k` (SPEC.md §2): `k` ниже наклона — метрика
+    тянет к дешёвому относительно рынка, выше — к качеству. Считается по
+    платным строкам категории; None, если считать не по чему.
+    """
+    xs, ys = [], []
+    for r, p in zip(ratings, prices):
+        if r is None or p is None or p <= 0 or not math.isfinite(p):
+            continue
+        xs.append(r)
+        ys.append(math.log(p))
+    n = len(xs)
+    if n < 3:
+        return None
+    mx = sum(xs) / n
+    my = sum(ys) / n
+    sxx = sum((x - mx) ** 2 for x in xs)
+    if sxx <= 0:
+        return None
+    return sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / sxx
+
+
 def blended_price(input_price: float, output_price: float, token_share: float) -> float:
     """Средневзвешенная цена $/1M: token_share вход + (1-token_share) выход."""
     return token_share * input_price + (1.0 - token_share) * output_price

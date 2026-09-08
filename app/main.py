@@ -106,6 +106,9 @@ def meta():
         "updated_at": snap["updated_at"],
         # dataset/revision/publish_date источников; .get — старые снапшоты в кэше
         "sources": snap.get("sources", {}),
+        # Наклон «цена ~ рейтинг» по вкладкам: с ним видно, тянет ли текущий
+        # `k` к качеству или к цене относительно самого рынка.
+        "calibration": snap.get("calibration", {}),
         "unmatched": snap["unmatched"],
     }
 

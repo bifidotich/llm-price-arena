@@ -566,7 +566,8 @@
       <br>• <strong id="modalK">k = 0.01</strong> — во сколько раз рейтинг искупает цену; порядок строк задаёт только он.
       <br>• <strong id="modalGamma">γ = 0.5</strong> — растяжение шкалы value; на порядок строк не влияет.
       <hr style="margin: 10px 0; border: 0; border-top: 1px solid #2d3142;">
-      • <strong>MedianTopN</strong> — медианный рейтинг топ-10 моделей категории <em>по рейтингу</em> (модель, ближайшая к нему, подсвечена в таблице).
+      • <strong>Rating</strong> в метрику идёт не точечной оценкой, а нижней границей 95% CI (± в колонке). В верхушке таблицы разрыв между соседями меньше ширины интервала — на срезе 2026-09-02 в топ-10 <em>overall</em> 25 пар из 45 статистически неразличимы, а четыре верхние строки неотличимы от лидера, — и точечный рейтинг выдавал бы за качество шум выборки голосов.
+      <br>• <strong>MedianTopN</strong> — медианный рейтинг топ-10 моделей категории <em>по рейтингу</em> (модель, ближайшая к нему, подсвечена в таблице).
       <br>• <strong>Price_eff</strong> — сколько стоила бы модель, будь у неё рейтинг медианы: отставание дорожает экспоненциально, опережение — дешевеет.
       <br>• <strong>Price_eff_median</strong> — медиана Price_eff по категории. Медиана, а не минимум: минимум держит одна строка, и одна аномально дешёвая модель сдвигала бы value всем остальным.
       <br>• <strong>BlendedPrice</strong> — средневзвешенная стоимость 1M токенов (75% вход / 25% выход). Нижняя граница $0.01/1M нужна, чтобы бесплатные модели попадали в метрику, а не делили на ноль.
@@ -681,6 +682,20 @@ async function fetchModels(category, preset) {
 
 function getValueForPreset(item, preset) {
   return (item.value && item.value[preset] != null) ? item.value[preset] : 0;
+}
+
+// Полуширина 95% CI рейтинга. В верхушке таблицы она шире разрыва между
+// соседями, поэтому рейтинг без неё читается как точная величина, хотя ею
+// не является: метрика считает по нижней границе (SPEC.md §2).
+function ratingCell(item) {
+  var r = item.rating.toFixed(1);
+  if (item.rating_lower == null || item.rating_upper == null) return r;
+  var hw = (item.rating_upper - item.rating_lower) / 2;
+  if (!(hw > 0)) return r;
+  return r + '<span title="95% CI: ' + item.rating_lower.toFixed(1) + '..' +
+         item.rating_upper.toFixed(1) + '. В метрику идёт нижняя граница." ' +
+         'style="color:#64748b; font-size:.85em; margin-left:4px">±' +
+         hw.toFixed(1) + '</span>';
 }
 
 // Цену подменил price_floor: value такой строки стоит на константе конфига,
@@ -1228,7 +1243,7 @@ async function upd() {
       }
 
       var cDate = x.created ? new Date(x.created * 1000).toLocaleDateString('ru-RU') : '-';
-      tb += '<tr class="' + rw + '" style="' + rowStyle + '"><td class="rank' + rc + '">' + (i + 1) + '</td><td class="model">' + mName + '</td><td class="rating">' + x.rating.toFixed(1) + '</td><td class="price">$' + x.input_price_1M.toFixed(4) + '</td><td class="price">$' + x.output_price_1M.toFixed(4) + '</td>' + pCell + '<td style="color:#94a3b8">' + cDate + '</td><td style="color:#a78bfa; font-weight:700">' + valueCell(x, preset) + '</td></tr>';
+      tb += '<tr class="' + rw + '" style="' + rowStyle + '"><td class="rank' + rc + '">' + (i + 1) + '</td><td class="model">' + mName + '</td><td class="rating">' + ratingCell(x) + '</td><td class="price">$' + x.input_price_1M.toFixed(4) + '</td><td class="price">$' + x.output_price_1M.toFixed(4) + '</td>' + pCell + '<td style="color:#94a3b8">' + cDate + '</td><td style="color:#a78bfa; font-weight:700">' + valueCell(x, preset) + '</td></tr>';
     });
     tb += '</tbody></table>';
     document.getElementById('tbl').innerHTML = tb;
